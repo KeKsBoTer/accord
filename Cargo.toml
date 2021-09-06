@@ -1,0 +1,23 @@
+[package]
+name = "accord"
+version = "0.1.0"
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+serde = {version="1.0.130", features = ["derive"]}
+serde_cbor = "0.11.2"
+structopt = { version = "0.3", default-features = false }
+sha-1 = "0.9.8"
+num-bigint = "0.4.1"
+
+
+[lib]
+name = "accord"
+path = "src/lib.rs"
+
+
+[[bin]]
+name = "accord"
+path = "src/main.rs"
