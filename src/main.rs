@@ -1,8 +1,13 @@
 use accord::{com, node::Node};
-use std::{net::SocketAddr, thread, time::Duration};
+use std::net::{IpAddr, Ipv4Addr};
+use std::{
+    net::{SocketAddr, SocketAddrV4},
+    thread,
+    time::Duration,
+};
 use structopt::StructOpt;
 
-type StringNode = Node<String, String, 8>;
+static mut NODES: Vec<Node<String, String>> = Vec::new();
 
 #[derive(StructOpt)]
 #[structopt(name = "akkord", about = "Chord Node Process")]
@@ -30,36 +35,13 @@ fn suicide_thread(timeout: Duration) {
 }
 
 fn main() {
-    let opt = Opt::from_args();
-    suicide_thread(Duration::from_secs(opt.ttl * 60));
+    // let opt = Opt::from_args();
+    //suicide_thread(Duration::from_secs(opt.ttl * 60));
 
-    let node = StringNode::new(opt.entry_node, opt.entry_node);
-
-    let socket = com::MessageSocket::bind(opt.address).unwrap();
-
-    let receiver = thread::spawn(move || {
-        while let Ok((msg, sender)) = socket.recv_from() {
-            match msg {
-                com::Message::Ping => {
-                    socket.send_to(com::Message::Pong, sender).unwrap();
-                }
-                com::Message::Pong => {
-                    todo!("keep track of alive nodes");
-                }
-                com::Message::Lookup(key, querier) => {
-                    if node.contains_bucket(key) {
-                        socket.send_to(com::Message::Result(true), querier).unwrap();
-                    }
-                }
-                com::Message::Result(dst) => {
-                    // connect to node and proxy value to clinet
-                    todo!("implement result receiving!");
-                }
-                com::Message::Notify(r) => {
-                    todo!("implement notify!");
-                }
-            };
+    for i in 1..10 {
+        let ip = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
+        unsafe {
+            NODES.push(Node::new(SocketAddr::new(ip, 8080 + i)));
         }
-    });
-    receiver.join().unwrap();
+    }
 }
