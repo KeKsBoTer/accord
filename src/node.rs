@@ -2,70 +2,143 @@ use std::collections::HashMap;
 use std::hash::Hash;
 use std::net::SocketAddr;
 
-use super::com::Message;
+use crate::{
+    network::{self, Message},
+    routing::id::{HashIdentifier, Identifier},
+};
 
 #[derive(Debug, PartialEq)]
 struct Neighbor {
-    id: u64,
+    id: Identifier,
     addr: SocketAddr,
 }
 
+impl Neighbor {
+    fn new(addr: SocketAddr) -> Self {
+        Neighbor {
+            id: addr.hash_id(),
+            addr: addr,
+        }
+    }
+
+    fn find_successor(&self, id: Identifier) -> Neighbor {
+        let response = network::send_message(Message::Lookup(id), self.addr).unwrap();
+        match response {
+            Message::Result(addr) => addr.into(),
+            msg => panic!("unexpected response: {:?}", msg),
+        }
+    }
+}
+
+impl From<SocketAddr> for Neighbor {
+    fn from(addr: SocketAddr) -> Self {
+        Neighbor::new(addr)
+    }
+}
+
 #[derive(Debug)]
-pub struct Node<K: Hash, V> {
+pub struct Node<Key, Value>
+where
+    Key: Eq + Hash + HashIdentifier<Identifier>,
+{
     pub address: SocketAddr,
     predecessor: Option<Neighbor>,
     successor: Option<Neighbor>,
 
-    id: u64,
-    store: HashMap<K, V>,
+    id: Identifier,
+    store: HashMap<Key, Value>,
 }
 
-impl<K, V> Node<K, V>
+impl<Key, Value> Node<Key, Value>
 where
-    K: Hash,
+    Key: Eq + Hash + HashIdentifier<Identifier>,
 {
-    pub fn new(address: SocketAddr) -> Self {
+    pub fn new(addr: SocketAddr) -> Self {
         Node {
-            address: address,
+            address: addr,
             predecessor: None,
-            successor: None, // TODO put self in here
+            successor: Some(Neighbor::new(addr)),
 
-            id: 0, // TODO: hash id
-            store: HashMap::<K, V>::new(),
+            id: addr.hash_id(),
+            store: HashMap::<Key, Value>::new(),
         }
     }
 
-    fn join(&self, other: Neighbor) {
-        todo!("join network")
+    fn contains_id(&self, id: Identifier) -> bool {
+        match &self.predecessor {
+            Some(p) => id.is_between(self.id, p.id),
+            None => true, // TODO is this right?
+        }
     }
 
-    fn find_successor(&self, id: u64) -> u64 {
-        // TODO change to only accept Lookup message
-        todo!()
-        // if (i am responsible for the id)
-        //    return self
-        // else
-        //    return successor.find_successor(id)
+    // finds the value for a given key within the chord ring
+    pub fn lookup(&self, key: Key) -> Option<&Value> {
+        let id = key.hash_id();
+        if self.contains_id(id) {
+            return self.store.get(&key);
+        } else {
+            // find responsible node
+            let successor_addr = self
+                .successor
+                .as_ref()
+                .and_then(|s| Some(s.find_successor(id)));
+            if let Some(addr) = successor_addr {
+                todo!("get value");
+                return None;
+            }
+            return None;
+        }
     }
 
-    fn find_predecessor(&self, id: u64) -> u64 {
+    pub fn handle_message(&mut self, msg: Message) -> Option<Message> {
+        match msg {
+            Message::Lookup(id) => Some(Message::Result(self.find_successor(id).addr)),
+            Message::Notify(addr) => {
+                self.notify(addr.into());
+                None
+            }
+            Message::Ping => Some(Message::Pong),
+            _ => panic!("this should not happen (incomming message: {:?})", msg),
+        }
+    }
+
+    pub fn join(&mut self, entry: SocketAddr) {
+        let neighbor = Neighbor::new(entry);
+        self.predecessor = None;
+        self.successor = Some(neighbor.find_successor(self.id));
+    }
+
+    fn find_successor(&self, id: Identifier) -> Neighbor {
+        if self.contains_id(id) {
+            self.address.into()
+        } else {
+            self.successor.as_ref().unwrap().find_successor(id)
+        }
+    }
+
+    fn find_predecessor(&self, id: Identifier) -> Neighbor {
         todo!("find predecessor for an id")
         // find_successor(id).predecessor
     }
 
-    fn check_predecessor(&self) {
-        todo!("check if predecessor has failed")
-        // ping predecessor
-        // if alive
-        //      do nothing
-        // else
-        //     predecessor = find_predecessor(predecessor.id)
+    fn check_predecessor(&mut self) {
+        if let Some(predecessor) = &self.predecessor {
+            let resp = network::send_message(Message::Ping, predecessor.addr);
+            if resp.is_err() {
+                // node is dead
+                self.predecessor = Some(self.find_predecessor(predecessor.id));
+            }
+        }
     }
 
-    fn notify(&self, other: Neighbor) {
-        todo!("this node is called. add as predecessor if range fits")
-        // if other.end > predecessor.end
-        //     predecessor = other
+    fn notify(&mut self, other: Neighbor) {
+        if let Some(predecessor) = &self.predecessor {
+            if other.id > predecessor.id {
+                self.predecessor = Some(other)
+            }
+        } else {
+            self.predecessor = Some(other)
+        }
     }
 
     fn stabilize(&self) {
