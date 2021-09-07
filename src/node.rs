@@ -1,13 +1,13 @@
-use std::collections::HashMap;
 use std::hash::Hash;
 use std::net::SocketAddr;
+use std::{collections::HashMap, sync::Mutex};
 
 use crate::{
-    network::{self, Message},
+    network::{self, Message, MessageError},
     routing::id::{HashIdentifier, Identifier},
 };
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 struct Neighbor {
     id: Identifier,
     addr: SocketAddr,
@@ -21,13 +21,12 @@ impl Neighbor {
         }
     }
 
-    async fn find_successor(&self, id: Identifier) -> Neighbor {
-        let response = network::send_message(Message::Lookup(id), self.addr)
-            .await
-            .unwrap();
+    async fn find_successor(&self, id: Identifier) -> Result<Neighbor, MessageError> {
+        let msg = Message::Lookup(id);
+        let response = network::send_message(msg, self.addr).await?;
         match response {
-            Message::Result(addr) => addr.into(),
-            msg => panic!("unexpected response: {:?}", msg),
+            Message::Result(addr) => Ok(Neighbor::new(addr)),
+            msg => Err(MessageError::UnexpectedResponse(msg, response)),
         }
     }
 }
@@ -42,79 +41,94 @@ impl From<SocketAddr> for Neighbor {
 pub struct Node<Key, Value>
 where
     Key: Eq + Hash + HashIdentifier<Identifier>,
+    Value: Clone,
 {
     pub address: SocketAddr,
-    predecessor: Option<Neighbor>,
-    successor: Option<Neighbor>,
+    predecessor: Mutex<Option<Neighbor>>,
+    successor: Mutex<Option<Neighbor>>,
 
     id: Identifier,
-    store: HashMap<Key, Value>,
+    store: Mutex<HashMap<Key, Value>>,
 }
 
 impl<Key, Value> Node<Key, Value>
 where
     Key: Eq + Hash + HashIdentifier<Identifier>,
+    Value: Clone,
 {
     pub fn new(addr: SocketAddr) -> Self {
         Node {
             address: addr,
-            predecessor: None,
-            successor: Some(Neighbor::new(addr)),
+            predecessor: Mutex::new(None),
+            successor: Mutex::new(Some(Neighbor::new(addr))),
 
             id: addr.hash_id(),
-            store: HashMap::<Key, Value>::new(),
+            store: Mutex::new(HashMap::<Key, Value>::new()),
         }
     }
 
     fn contains_id(&self, id: Identifier) -> bool {
-        match &self.predecessor {
-            Some(p) => id.is_between(self.id, p.id),
-            None => true, // TODO is this right?
-        }
+        self.predecessor
+            .lock()
+            .unwrap()
+            .as_ref()
+            .map(|n| id.is_between(self.id, n.id))
+            .unwrap_or(true) // TODO is this right?
     }
 
     // finds the value for a given key within the chord ring
-    pub async fn lookup(&self, key: Key) -> Option<&Value> {
+    pub async fn lookup(&self, key: Key) -> Result<Option<Value>, MessageError> {
         let id = key.hash_id();
         if self.contains_id(id) {
-            return self.store.get(&key);
+            let value = self.store.lock().unwrap().get(&key).map(|n| n.clone());
+            return Ok(value);
         } else {
-            // find responsible node
-            let successor_addr = self
-                .successor
-                .as_ref()
-                .and_then(|s| Some(s.find_successor(id)));
-            if let Some(addr) = successor_addr {
+            let succ = self.successor.lock().unwrap().clone();
+            if let Some(n) = succ {
+                let addr = n.find_successor(id).await?;
                 todo!("get value");
-                return None;
+                return Ok(None);
             }
-            return None;
+
+            return Ok(None);
         }
     }
 
-    pub async fn handle_message(&mut self, msg: Message) -> Option<Message> {
+    pub async fn handle_message(&self, msg: Message) -> Result<Option<Message>, MessageError> {
         match msg {
-            Message::Lookup(id) => Some(Message::Result(self.find_successor(id).await.addr)),
+            Message::Lookup(id) => {
+                let responsible_node = self.find_successor(id).await?;
+                Ok(Some(Message::Result(responsible_node.addr)))
+            }
             Message::Notify(addr) => {
                 self.notify(addr.into());
-                None
+                Ok(None)
             }
-            Message::Ping => Some(Message::Pong),
+            Message::Ping => Ok(Some(Message::Pong)),
             _ => panic!("this should not happen (incomming message: {:?})", msg),
         }
     }
 
-    pub async fn join(&mut self, entry: SocketAddr) {
+    pub async fn join(&self, entry: SocketAddr) -> Result<(), MessageError> {
         let neighbor = Neighbor::new(entry);
-        self.predecessor = None;
-        self.successor = Some(neighbor.find_successor(self.id).await);
+        let mut pred = self.predecessor.lock().unwrap();
+        *pred = None;
+        let mut succ = self.successor.lock().unwrap();
+        *succ = Some(neighbor.find_successor(self.id).await?);
+        Ok(())
     }
 
-    async fn find_successor(&self, id: Identifier) -> Neighbor {
+    async fn find_successor(&self, id: Identifier) -> Result<Neighbor, MessageError> {
         if self.contains_id(id) {
-            self.address.into()
+            Ok(self.address.into())
         } else {
-            self.successor.as_ref().unwrap().find_successor(id).await
+            self.successor
+                .lock()
+                .unwrap()
+                .as_ref()
+                .unwrap()
+                .find_successor(id)
+                .await
         }
     }
 
@@ -123,23 +137,24 @@ where
         // find_successor(id).predecessor
     }
 
-    async fn check_predecessor(&mut self) {
-        if let Some(predecessor) = &self.predecessor {
+    async fn check_predecessor(&self) {
+        if let Some(predecessor) = self.predecessor.lock().unwrap().as_mut() {
             let resp = network::send_message(Message::Ping, predecessor.addr).await;
             if resp.is_err() {
                 // node is dead
-                self.predecessor = Some(self.find_predecessor(predecessor.id).await);
+                *predecessor = self.find_predecessor(predecessor.id).await;
             }
         }
     }
 
-    fn notify(&mut self, other: Neighbor) {
-        if let Some(predecessor) = &self.predecessor {
+    fn notify(&self, other: Neighbor) {
+        let mut pred = self.predecessor.lock().unwrap();
+        if let Some(predecessor) = pred.as_mut() {
             if other.id > predecessor.id {
-                self.predecessor = Some(other)
+                *predecessor = other
             }
         } else {
-            self.predecessor = Some(other)
+            *pred = Some(other)
         }
     }
 
@@ -147,5 +162,21 @@ where
         todo!("check if I am the successor of my predecessor")
         // TODO notify predecessor that I am his successor
         // successor.get_predecessor()
+    }
+
+    pub fn neighbors(&self) -> Vec<SocketAddr> {
+        match self.successor.lock().unwrap().as_ref() {
+            Some(successor) => vec![successor.addr],
+            None => Vec::new(),
+        }
+    }
+
+    pub async fn put(&self, key: Key, value: Value) -> Result<(), MessageError> {
+        let id = key.hash_id();
+        if !self.contains_id(id) {
+            todo!("tried to insert key with id '{:}' into wrong node", id)
+        }
+        self.store.lock().unwrap().insert(key, value);
+        Ok(())
     }
 }

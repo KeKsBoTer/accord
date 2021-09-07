@@ -1,13 +1,12 @@
 use serde::{Deserialize, Serialize};
 use std::future::Future;
 use std::net::SocketAddr;
-use std::process::Output;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 
 use crate::routing::id::Identifier;
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 pub enum Message {
     Lookup(Identifier),
     Result(SocketAddr),
@@ -20,6 +19,7 @@ pub enum Message {
 pub enum MessageError {
     IOError(std::io::Error),
     SerdeError(serde_cbor::Error),
+    UnexpectedResponse(Message, Message),
 }
 
 impl From<std::io::Error> for MessageError {
