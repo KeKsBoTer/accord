@@ -21,8 +21,10 @@ impl Neighbor {
         }
     }
 
-    fn find_successor(&self, id: Identifier) -> Neighbor {
-        let response = network::send_message(Message::Lookup(id), self.addr).unwrap();
+    async fn find_successor(&self, id: Identifier) -> Neighbor {
+        let response = network::send_message(Message::Lookup(id), self.addr)
+            .await
+            .unwrap();
         match response {
             Message::Result(addr) => addr.into(),
             msg => panic!("unexpected response: {:?}", msg),
@@ -72,7 +74,7 @@ where
     }
 
     // finds the value for a given key within the chord ring
-    pub fn lookup(&self, key: Key) -> Option<&Value> {
+    pub async fn lookup(&self, key: Key) -> Option<&Value> {
         let id = key.hash_id();
         if self.contains_id(id) {
             return self.store.get(&key);
@@ -90,9 +92,9 @@ where
         }
     }
 
-    pub fn handle_message(&mut self, msg: Message) -> Option<Message> {
+    pub async fn handle_message(&mut self, msg: Message) -> Option<Message> {
         match msg {
-            Message::Lookup(id) => Some(Message::Result(self.find_successor(id).addr)),
+            Message::Lookup(id) => Some(Message::Result(self.find_successor(id).await.addr)),
             Message::Notify(addr) => {
                 self.notify(addr.into());
                 None
@@ -102,31 +104,31 @@ where
         }
     }
 
-    pub fn join(&mut self, entry: SocketAddr) {
+    pub async fn join(&mut self, entry: SocketAddr) {
         let neighbor = Neighbor::new(entry);
         self.predecessor = None;
-        self.successor = Some(neighbor.find_successor(self.id));
+        self.successor = Some(neighbor.find_successor(self.id).await);
     }
 
-    fn find_successor(&self, id: Identifier) -> Neighbor {
+    async fn find_successor(&self, id: Identifier) -> Neighbor {
         if self.contains_id(id) {
             self.address.into()
         } else {
-            self.successor.as_ref().unwrap().find_successor(id)
+            self.successor.as_ref().unwrap().find_successor(id).await
         }
     }
 
-    fn find_predecessor(&self, id: Identifier) -> Neighbor {
+    async fn find_predecessor(&self, id: Identifier) -> Neighbor {
         todo!("find predecessor for an id")
         // find_successor(id).predecessor
     }
 
-    fn check_predecessor(&mut self) {
+    async fn check_predecessor(&mut self) {
         if let Some(predecessor) = &self.predecessor {
-            let resp = network::send_message(Message::Ping, predecessor.addr);
+            let resp = network::send_message(Message::Ping, predecessor.addr).await;
             if resp.is_err() {
                 // node is dead
-                self.predecessor = Some(self.find_predecessor(predecessor.id));
+                self.predecessor = Some(self.find_predecessor(predecessor.id).await);
             }
         }
     }
@@ -141,7 +143,7 @@ where
         }
     }
 
-    fn stabilize(&self) {
+    async fn stabilize(&self) {
         todo!("check if I am the successor of my predecessor")
         // TODO notify predecessor that I am his successor
         // successor.get_predecessor()

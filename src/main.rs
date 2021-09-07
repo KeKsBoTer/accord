@@ -1,7 +1,12 @@
-use accord::{network, node::Node};
+use accord::{
+    network::{self},
+    node::Node,
+};
+use std::net::SocketAddr;
 use std::sync::Mutex;
-use std::{net::SocketAddr, thread, time::Duration};
 use structopt::StructOpt;
+
+use tokio::time::{timeout, Duration};
 
 type ChordNode = Node<String, String>;
 
@@ -22,33 +27,31 @@ struct Opt {
     ttl: u64,
 }
 
-fn suicide_thread(timeout: Duration) {
-    thread::spawn(move || {
-        thread::sleep(timeout);
-        println!("timeout: suicide!");
-        std::process::exit(1);
-    });
-}
-
-fn main() {
+#[tokio::main]
+async fn main() {
     let opt = Opt::from_args();
-    suicide_thread(Duration::from_secs(opt.ttl * 60));
 
     let mut n = ChordNode::new(opt.address);
     if let Some(entry_node) = opt.entry_node {
-        n.join(entry_node);
+        n.join(entry_node).await;
         println!("{:} joined chord network {:}", n.address, entry_node);
     } else {
         println!("creating new chord network {:}", n.address);
     }
 
     let m = Mutex::new(&mut n);
-    network::listen_for_messages(opt.address, |msg| {
+
+    let listener = network::listen_for_messages(opt.address, |msg| async {
         if let Ok(mut n) = m.lock() {
-            n.handle_message(msg)
+            n.handle_message(msg).await
         } else {
             None
         }
-    })
-    .unwrap();
+    });
+
+    // kill process after some time
+    timeout(Duration::from_secs(opt.ttl * 60), listener)
+        .await
+        .unwrap()
+        .unwrap();
 }

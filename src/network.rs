@@ -1,6 +1,9 @@
 use serde::{Deserialize, Serialize};
+use std::future::Future;
 use std::net::SocketAddr;
-use std::net::{Shutdown, TcpListener, TcpStream};
+use std::process::Output;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::{TcpListener, TcpStream};
 
 use crate::routing::id::Identifier;
 
@@ -30,39 +33,37 @@ impl From<serde_cbor::Error> for MessageError {
     }
 }
 
-pub fn send_message(msg: Message, addr: SocketAddr) -> Result<Message, MessageError> {
-    let stream = &TcpStream::connect(addr)?;
-    // send messages
-    serde_cbor::to_writer(stream, &msg)?;
-    stream.shutdown(Shutdown::Write)?;
+pub async fn send_message(msg: Message, addr: SocketAddr) -> Result<Message, MessageError> {
+    let mut stream = TcpStream::connect(addr).await?;
+
+    // send message
+    let buf = serde_cbor::to_vec(&msg)?;
+    stream.write_all(&buf).await?;
+    stream.shutdown().await?;
+
     // read response
-    let answer = serde_cbor::from_reader(stream)?;
+    let mut resp_buf = Vec::with_capacity(32);
+    stream.read_to_end(&mut resp_buf).await?;
+    let answer: Message = serde_cbor::from_slice(resp_buf.as_slice())?;
     Ok(answer)
 }
 
-pub fn listen_for_messages(
-    addr: SocketAddr,
-    handler: impl Fn(Message) -> Option<Message>,
-) -> Result<(), MessageError> {
-    let listener = TcpListener::bind(addr)?;
-    for stream in listener.incoming() {
-        match &stream {
-            Ok(tcp_stream) => {
-                let current_ref = || -> Result<(), MessageError> {
-                    let msg = serde_cbor::from_reader(tcp_stream)?;
-                    if let Some(resp) = handler(msg) {
-                        serde_cbor::to_writer(tcp_stream, &resp)?;
-                    }
-                    Ok(())
-                }();
-                if let Err(err) = current_ref {
-                    println!("error: {:?}", err)
-                }
-            }
-            Err(err) => {
-                println!("error: {:?}", err)
-            }
+pub async fn listen_for_messages<F, Fut>(addr: SocketAddr, handler: F) -> Result<(), MessageError>
+where
+    F: Fn(Message) -> Fut,
+    Fut: Future<Output = Option<Message>>,
+{
+    let listener = TcpListener::bind(addr).await?;
+    loop {
+        let (mut tcp_stream, _) = listener.accept().await?;
+        let mut send_buf = Vec::with_capacity(32);
+        tcp_stream.read_to_end(&mut send_buf).await?;
+        let msg: Message = serde_cbor::from_slice(send_buf.as_slice())?;
+
+        if let Some(resp) = handler(msg).await {
+            let buf = serde_cbor::to_vec(&resp)?;
+            tcp_stream.write_all(&buf).await?;
+            tcp_stream.shutdown().await?;
         }
     }
-    Ok(())
 }
