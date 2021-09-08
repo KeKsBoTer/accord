@@ -9,7 +9,11 @@ use crate::routing::id::Identifier;
 #[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 pub enum Message {
     Lookup(Identifier),
-    Result(SocketAddr),
+    LookupResult(SocketAddr),
+
+    GetPredecessor,
+    PredecessorResponse(Option<SocketAddr>),
+
     Notify(SocketAddr),
     Ping,
     Pong,
@@ -19,7 +23,7 @@ pub enum Message {
 pub enum MessageError {
     IOError(std::io::Error),
     SerdeError(serde_cbor::Error),
-    UnexpectedResponse(Message, Message),
+    UnexpectedResponse(Message, Option<Message>),
 }
 
 impl From<std::io::Error> for MessageError {
@@ -33,9 +37,8 @@ impl From<serde_cbor::Error> for MessageError {
     }
 }
 
-pub async fn send_message(msg: Message, addr: SocketAddr) -> Result<Message, MessageError> {
+pub async fn send_message(msg: Message, addr: SocketAddr) -> Result<Option<Message>, MessageError> {
     let mut stream = TcpStream::connect(addr).await?;
-
     // send message
     let buf = serde_cbor::to_vec(&msg)?;
     stream.write_all(&buf).await?;
@@ -44,8 +47,12 @@ pub async fn send_message(msg: Message, addr: SocketAddr) -> Result<Message, Mes
     // read response
     let mut resp_buf = Vec::with_capacity(32);
     stream.read_to_end(&mut resp_buf).await?;
-    let answer: Message = serde_cbor::from_slice(resp_buf.as_slice())?;
-    Ok(answer)
+    if resp_buf.is_empty() {
+        Ok(None)
+    } else {
+        let answer: Message = serde_cbor::from_slice(resp_buf.as_slice())?;
+        Ok(Some(answer))
+    }
 }
 
 pub async fn listen_for_messages<F, Fut>(addr: SocketAddr, handler: F) -> Result<(), MessageError>

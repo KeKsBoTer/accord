@@ -9,9 +9,8 @@ processes = [
         ["./target/debug/accord", f"127.0.0.1:{entry_node}", f"127.0.0.1:{ws_port}", ])
 ]
 
-time.sleep(2)
-
 for i in range(1, 8+1):
+    time.sleep(1)
     p = subprocess.Popen(["./target/debug/accord",
                           f"127.0.0.1:{entry_node+i}",
                           f"127.0.0.1:{ws_port+i}",

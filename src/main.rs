@@ -4,7 +4,7 @@ use accord::{
 };
 use std::{net::SocketAddr, sync::Arc};
 use structopt::StructOpt;
-use warp::hyper::{body::Bytes};
+use warp::hyper::body::Bytes;
 use warp::Filter;
 
 use tokio::time::{sleep, Duration};
@@ -51,6 +51,7 @@ async fn main() {
     }
 
     let chord_server = network::listen_for_messages(opt.address, |msg| {
+        println!("{:} received message: {:?}", chord_node, msg);
         let node = chord_node.clone();
         async move {
             match node.handle_message(msg).await {
@@ -98,12 +99,25 @@ async fn main() {
 
     let webserver = warp::serve(get.or(put).or(neighbors)).bind(opt.webserver_adress);
 
+    let stabilize_node = chord_node.clone();
+    let stabilizer = async {
+        loop {
+            sleep(Duration::from_secs(5)).await;
+            if let Err(err) = stabilize_node.stabilize().await {
+                println!("error: {:?}", err);
+            }
+        }
+    };
+
     tokio::select! {
         val = chord_server => {
             println!("chord server shut down: {:?}",val);
         },
         val = webserver => {
             println!("webserver shut down: {:?}",val);
+        },
+        val = stabilizer => {
+            println!("stabilizer shut down: {:?}",val);
         },
         _ = sleep(Duration::from_secs(opt.ttl * 60)) => {
             // kill process after some time
