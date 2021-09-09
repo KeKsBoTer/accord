@@ -1,61 +1,47 @@
+use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 use std::hash::Hash;
 use std::net::SocketAddr;
 use std::{collections::HashMap, sync::Mutex};
 
+use crate::handle_message;
 use crate::{
     network::{self, Message, MessageError},
     routing::id::{HashIdentifier, Identifier},
 };
 
-#[derive(Debug, PartialEq, Clone, Copy)]
-struct Neighbor {
+#[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
+pub struct Neighbor {
     id: Identifier,
     addr: SocketAddr,
+    web_addr: SocketAddr,
 }
 
 impl Neighbor {
-    fn new(addr: SocketAddr) -> Self {
+    fn new(addr: SocketAddr, web_addr: SocketAddr) -> Self {
         Neighbor {
             id: addr.hash_id(),
             addr: addr,
+            web_addr: web_addr,
         }
     }
 
     async fn find_successor(&self, id: Identifier) -> Result<Neighbor, MessageError> {
         let msg = Message::Lookup(id);
-        let response = network::send_message(msg, self.addr).await?;
-        match response {
-            Some(msg) => match msg {
-                Message::LookupResult(addr) => Ok(Neighbor::new(addr)),
-                m => Err(MessageError::UnexpectedResponse(m, response)),
-            },
-            None => Err(MessageError::UnexpectedResponse(msg, None)),
-        }
+        handle_message!(self.addr, msg, {
+            Message::LookupResult(neighbor) => neighbor
+        })
     }
 
     async fn get_predecessor(&self) -> Result<Option<Neighbor>, MessageError> {
         let msg = Message::GetPredecessor;
-        let response = network::send_message(msg, self.addr).await?;
-        match response {
-            Some(resp) => match resp {
-                Message::PredecessorResponse(addr) => Ok(addr.map(|a| Neighbor::new(a))),
-                r => Err(network::MessageError::UnexpectedResponse(msg, Some(r))),
-            },
-            None => Err(network::MessageError::UnexpectedResponse(msg, None)),
-        }
+        handle_message!(self.addr, msg, {
+            Message::PredecessorResponse(neighbor) => neighbor
+        })
     }
 
-    async fn notify(&self, addr: SocketAddr) -> Result<(), MessageError> {
-        let msg = Message::Notify(addr);
-        network::send_message(msg, self.addr).await?;
-        Ok(())
-    }
-}
-
-impl From<SocketAddr> for Neighbor {
-    fn from(addr: SocketAddr) -> Self {
-        Neighbor::new(addr)
+    async fn notify(&self, neighbor: Neighbor) -> Result<(), MessageError> {
+        handle_message!(self.addr, Message::Notify(neighbor))
     }
 }
 
@@ -66,6 +52,7 @@ where
     Value: Clone,
 {
     pub address: SocketAddr,
+    pub web_address: SocketAddr,
     predecessor: Mutex<Option<Neighbor>>,
     successor: Mutex<Neighbor>,
 
@@ -78,11 +65,12 @@ where
     Key: Eq + Hash + HashIdentifier<Identifier>,
     Value: Clone,
 {
-    pub fn new(addr: SocketAddr) -> Self {
+    pub fn new(addr: SocketAddr, web_addr: SocketAddr) -> Self {
         Node {
             address: addr,
+            web_address: web_addr,
             predecessor: Mutex::new(None),
-            successor: Mutex::new(Neighbor::new(addr)),
+            successor: Mutex::new(Neighbor::new(addr, web_addr)),
 
             id: addr.hash_id(),
             store: Mutex::new(HashMap::<Key, Value>::new()),
@@ -115,7 +103,7 @@ where
         match msg {
             Message::Lookup(id) => {
                 let responsible_node = self.find_successor(id).await?;
-                Ok(Some(Message::LookupResult(responsible_node.addr)))
+                Ok(Some(Message::LookupResult(responsible_node)))
             }
             Message::Notify(addr) => {
                 self.notify(addr.into());
@@ -123,7 +111,7 @@ where
             }
             Message::GetPredecessor => {
                 let pred = self.predecessor.lock().unwrap();
-                let response = Message::PredecessorResponse(pred.map(|n| n.addr));
+                let response = Message::PredecessorResponse(*pred);
                 Ok(Some(response))
             }
             Message::Ping => Ok(Some(Message::Pong)),
@@ -132,7 +120,7 @@ where
     }
 
     pub async fn join(&self, entry_node: SocketAddr) -> Result<(), MessageError> {
-        let neighbor = Neighbor::new(entry_node);
+        let neighbor = Neighbor::new(entry_node, entry_node);
         let mut pred = self.predecessor.lock().unwrap();
         *pred = None;
         let new_succ = neighbor.find_successor(self.id).await?;
@@ -143,7 +131,7 @@ where
 
     async fn find_successor(&self, id: Identifier) -> Result<Neighbor, MessageError> {
         if self.contains_id(id) {
-            Ok(self.address.into())
+            Ok(Neighbor::new(self.address, self.web_address))
         } else {
             let succ = self.successor.lock().unwrap().clone();
             succ.find_successor(id).await
@@ -189,14 +177,16 @@ where
                 *successor = x;
             }
         }
-        successor.notify(self.address).await?;
+        successor
+            .notify(Neighbor::new(self.address, self.web_address))
+            .await?;
         Ok(())
     }
 
     pub fn neighbors(&self) -> Vec<SocketAddr> {
         let succ = self.successor.lock().unwrap();
         // TODO return web api port, not chord port
-        vec![succ.addr]
+        vec![succ.web_addr]
     }
 
     pub async fn put(&self, key: Key, value: Value) -> Result<(), MessageError> {

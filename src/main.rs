@@ -36,7 +36,7 @@ struct Opt {
 async fn main() {
     let opt = Opt::from_args();
 
-    let chord_node = Arc::new(ChordNode::new(opt.address));
+    let chord_node = Arc::new(ChordNode::new(opt.address, opt.webserver_adress));
     if let Some(entry_node) = opt.entry_node {
         if let Err(err) = chord_node.join(entry_node).await {
             println!("cannot join network: {:?}", err);

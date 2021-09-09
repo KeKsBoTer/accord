@@ -13,7 +13,7 @@ while len(queue) > 0:
     dot.node(str(node), f'localhost:{node}')
     x = requests.get(f'http://localhost:{node}/neighbors')
 
-    successors = [int(s.split(":")[1])-1000 for s in x.json()]
+    successors = [int(s.split(":")[1]) for s in x.json()]
     for s in successors:
         if s not in visited:
             queue.add(s)
