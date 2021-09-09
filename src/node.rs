@@ -1,8 +1,11 @@
 use serde::{Deserialize, Serialize};
-use std::fmt::Display;
+use std::fmt::{self, Display};
 use std::hash::Hash;
 use std::net::SocketAddr;
+use std::str::FromStr;
 use std::{collections::HashMap, sync::Mutex};
+use warp::http;
+use warp::hyper::{Client, Uri};
 
 use crate::handle_message;
 use crate::{
@@ -48,8 +51,9 @@ impl Neighbor {
 #[derive(Debug)]
 pub struct Node<Key, Value>
 where
-    Key: Eq + Hash + HashIdentifier<Identifier>,
-    Value: Clone,
+    Key: Eq + Hash + HashIdentifier<Identifier> + ToString,
+    Value: Clone + FromStr + ToString,
+    <Value as FromStr>::Err: fmt::Debug,
 {
     pub address: SocketAddr,
     pub web_address: SocketAddr,
@@ -62,8 +66,9 @@ where
 
 impl<Key, Value> Node<Key, Value>
 where
-    Key: Eq + Hash + HashIdentifier<Identifier>,
-    Value: Clone,
+    Key: Eq + Hash + HashIdentifier<Identifier> + ToString,
+    Value: Clone + FromStr + ToString,
+    <Value as FromStr>::Err: fmt::Debug,
 {
     pub fn new(addr: SocketAddr, web_addr: SocketAddr) -> Self {
         Node {
@@ -94,8 +99,25 @@ where
             return Ok(value);
         } else {
             let succ = self.successor.lock().unwrap().clone();
-            let _addr = succ.find_successor(id).await?;
-            todo!("get value from addr");
+            let addr = succ.find_successor(id).await?;
+            let client = Client::new();
+
+            let url: Uri = format!("http://{:}/get/{:}", addr.web_addr, key.to_string())
+                .parse()
+                .unwrap();
+
+            // TODO error handling
+            let res = client.get(url).await.unwrap();
+            match res.status() {
+                http::StatusCode::NOT_FOUND => Ok(None),
+                http::StatusCode::OK => {
+                    let body = warp::hyper::body::to_bytes(res).await.unwrap();
+                    let body_str = String::from_utf8(body.to_vec()).unwrap();
+                    let v = Value::from_str(body_str.as_str()).unwrap();
+                    Ok(Some(v))
+                }
+                status => Err(MessageError::HTTPStatusError(status)),
+            }
         }
     }
 
@@ -192,7 +214,26 @@ where
     pub async fn put(&self, key: Key, value: Value) -> Result<(), MessageError> {
         let id = key.hash_id();
         if !self.contains_id(id) {
-            todo!("tried to insert key with id '{:}' into wrong node", id)
+            let succ = self.successor.lock().unwrap().clone();
+            let addr = succ.find_successor(id).await?;
+            let client = Client::new();
+
+            let url: Uri = format!("http://{:}/put/{:}", addr.web_addr, key.to_string())
+                .parse()
+                .unwrap();
+
+            let payload = warp::hyper::body::Body::from(value.to_string());
+            let req = http::Request::builder()
+                .uri(url)
+                .method(http::Method::PUT)
+                .body(payload)
+                .unwrap();
+            // TODO error handling
+            let res = client.request(req).await.unwrap();
+            return match res.status() {
+                http::StatusCode::OK => Ok(()),
+                status => Err(MessageError::HTTPStatusError(status)),
+            };
         }
         self.store.lock().unwrap().insert(key, value);
         Ok(())
@@ -201,8 +242,9 @@ where
 
 impl<Key, Value> Display for Node<Key, Value>
 where
-    Key: Eq + Hash + HashIdentifier<Identifier>,
-    Value: Clone,
+    Key: Eq + Hash + HashIdentifier<Identifier> + ToString,
+    Value: Clone + FromStr + ToString,
+    <Value as FromStr>::Err: fmt::Debug,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_fmt(format_args!("({:}|{:x})", self.address, u64::from(self.id)))

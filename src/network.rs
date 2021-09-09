@@ -3,6 +3,7 @@ use std::future::Future;
 use std::net::SocketAddr;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
+use warp::http;
 
 use crate::node::Neighbor;
 use crate::routing::id::Identifier;
@@ -25,6 +26,7 @@ pub enum MessageError {
     IOError(std::io::Error),
     SerdeError(serde_cbor::Error),
     UnexpectedResponse(Message, Option<Message>),
+    HTTPStatusError(http::StatusCode),
 }
 
 impl From<std::io::Error> for MessageError {
