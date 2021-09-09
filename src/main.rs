@@ -1,13 +1,14 @@
-use accord::{
-    network::{self},
-    node::Node,
-};
+use accord::{network::Message, node::Node};
 use std::{net::SocketAddr, sync::Arc};
 use structopt::StructOpt;
 use warp::hyper::body::Bytes;
 use warp::Filter;
 
-use tokio::time::{sleep, Duration};
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    net::TcpListener,
+    time::{sleep, Duration},
+};
 
 type ChordNode = Node<String, String>;
 
@@ -50,16 +51,29 @@ async fn main() {
         println!("creating new chord network {:}", chord_node.address);
     }
 
-    let chord_server = network::listen_for_messages(opt.address, |msg| {
-        println!("{:} received message: {:?}", chord_node, msg);
-        let node = chord_node.clone();
-        async move {
-            match node.handle_message(msg).await {
-                Ok(resp) => resp,
-                Err(_) => None,
-            }
+    // TODO move in own function / component
+    let listener = TcpListener::bind(opt.address).await.unwrap();
+    let chord_server = async {
+        loop {
+            let (mut tcp_stream, _) = listener.accept().await.unwrap();
+
+            let tcp_chord_node = chord_node.clone();
+            tokio::spawn(async move {
+                // TODO error handling
+                let mut send_buf = Vec::with_capacity(32);
+                tcp_stream.read_to_end(&mut send_buf).await.unwrap();
+                let msg: Message = serde_cbor::from_slice(send_buf.as_slice()).unwrap();
+
+                if let Some(resp) = tcp_chord_node.handle_message(msg).await.unwrap() {
+                    let buf = serde_cbor::to_vec(&resp).unwrap();
+                    tcp_stream.write_all(&buf).await.unwrap();
+                    tcp_stream.shutdown().await.unwrap();
+                }
+            });
         }
-    });
+    };
+
+    // TODO move in own component / function
     let storage_api = warp::path!("storage" / String);
 
     let get_chord_node = chord_node.clone();
@@ -98,7 +112,6 @@ async fn main() {
         .map(move || warp::reply::json(&n_chord_node.neighbors()));
 
     let webserver = warp::serve(get.or(put).or(neighbors)).bind(opt.webserver_adress);
-
     let stabilize_node = chord_node.clone();
     let stabilizer = async {
         loop {

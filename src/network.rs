@@ -63,14 +63,16 @@ where
     let listener = TcpListener::bind(addr).await?;
     loop {
         let (mut tcp_stream, _) = listener.accept().await?;
+
+        // TODO error handling
         let mut send_buf = Vec::with_capacity(32);
-        tcp_stream.read_to_end(&mut send_buf).await?;
-        let msg: Message = serde_cbor::from_slice(send_buf.as_slice())?;
+        tcp_stream.read_to_end(&mut send_buf).await.unwrap();
+        let msg: Message = serde_cbor::from_slice(send_buf.as_slice()).unwrap();
 
         if let Some(resp) = handler(msg).await {
-            let buf = serde_cbor::to_vec(&resp)?;
-            tcp_stream.write_all(&buf).await?;
-            tcp_stream.shutdown().await?;
+            let buf = serde_cbor::to_vec(&resp).unwrap();
+            tcp_stream.write_all(&buf).await.unwrap();
+            tcp_stream.shutdown().await.unwrap();
         }
     }
 }

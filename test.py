@@ -2,7 +2,7 @@ import subprocess
 import time
 
 entry_node = 9000
-ws_port = 8080
+ws_port = 8000
 
 processes = [
     subprocess.Popen(

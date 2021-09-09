@@ -9,7 +9,7 @@ pub struct Identifier(u64);
 
 impl Identifier {
     // Returns whether this identifier is between `start` (exclusive) and `end` (inclusive) on the
-    // identifier circle
+    // identifier ring
     pub fn is_between(&self, start: Identifier, end: Identifier) -> bool {
         let diff1 = end - *self;
         let diff2 = end - start;
@@ -27,6 +27,12 @@ impl Display for Identifier {
 impl From<u64> for Identifier {
     fn from(value: u64) -> Self {
         Identifier(value)
+    }
+}
+
+impl From<Identifier> for u64 {
+    fn from(value: Identifier) -> Self {
+        value.0
     }
 }
 

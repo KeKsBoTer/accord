@@ -106,9 +106,8 @@ where
             return Ok(value);
         } else {
             let succ = self.successor.lock().unwrap().clone();
-            let addr = succ.find_successor(id).await?;
-            todo!("get value");
-            return Ok(None);
+            let _addr = succ.find_successor(id).await?;
+            todo!("get value from addr");
         }
     }
 
@@ -146,42 +145,47 @@ where
         if self.contains_id(id) {
             Ok(self.address.into())
         } else {
-            println!("{:}.find_successor({:})", self, id);
             let succ = self.successor.lock().unwrap().clone();
             succ.find_successor(id).await
         }
     }
 
-    async fn find_predecessor(&self, id: Identifier) -> Neighbor {
-        todo!("find predecessor for an id")
-        // find_successor(id).predecessor
-    }
-
-    async fn check_predecessor(&self) {
-        if let Some(predecessor) = self.predecessor.lock().unwrap().as_mut() {
-            let resp = network::send_message(Message::Ping, predecessor.addr).await;
-            if resp.is_err() {
-                // node is dead
-                *predecessor = self.find_predecessor(predecessor.id).await;
-            }
-        }
-    }
-
     fn notify(&self, other: Neighbor) {
         let mut pred = self.predecessor.lock().unwrap();
-        if let Some(predecessor) = pred.as_mut() {
-            if other.id > predecessor.id {
-                *predecessor = other
+        match pred.as_mut() {
+            Some(predecessor) => {
+                if other.id.is_between(predecessor.id, self.id) {
+                    println!("[{:}] updated predecessor to {:}", self, other.addr);
+                    *predecessor = other
+                }
             }
-        } else {
-            *pred = Some(other)
+            None => {
+                println!("[{:}] updated predecessor to {:}", self, other.addr);
+                *pred = Some(other)
+            }
+        }
+
+        // TODO check if this is right?
+        // if the successor is the node itself and we just changed the predecessor
+        // then the successor should be the predecessor (only two nodes in network)
+        // otherwise the successor for the first node, that created the network,
+        // is never updated.
+        let mut succ = self.successor.lock().unwrap();
+        if succ.id == self.id && pred.is_some() {
+            println!("[{:}] updated successor to {:}", self, other.addr);
+            *succ = pred.unwrap().clone()
         }
     }
 
     pub async fn stabilize(&self) -> Result<(), MessageError> {
         let mut successor = self.successor.lock().unwrap();
+        if self.id == successor.id {
+            // no need to send a message
+            return Ok(());
+        }
         if let Some(x) = successor.get_predecessor().await? {
             if x.id.is_between(self.id, successor.id) {
+                println!("[{:}] updated successor to {:}", self, x.addr);
                 *successor = x;
             }
         }
@@ -211,6 +215,6 @@ where
     Value: Clone,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!("Node({:})", self.address))
+        f.write_fmt(format_args!("({:}|{:x})", self.address, u64::from(self.id)))
     }
 }
