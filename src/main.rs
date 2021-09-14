@@ -2,7 +2,7 @@ use accord::{network::Message, node::Node};
 use std::{net::SocketAddr, sync::Arc};
 use structopt::StructOpt;
 use warp::hyper::body::Bytes;
-use warp::Filter;
+use warp::{http::Response, Filter};
 
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
@@ -23,6 +23,13 @@ struct Opt {
 
     #[structopt(long, help = "address of entry node")]
     entry_node: Option<SocketAddr>,
+
+    #[structopt(
+        long,
+        default_value = "5",
+        help = "duration (seconds) between stabilization runs"
+    )]
+    stabilization_period: u64,
 
     #[structopt(
         long,
@@ -81,10 +88,21 @@ async fn main() {
     let get = storage_api.and(warp::get()).and_then(move |key| {
         let node = get_chord_node.clone();
         async move {
-            let value = node.lookup(key).await.unwrap().map(|v| v.to_string());
-            match value {
-                Some(v) => Ok(v),
-                None => Err(warp::reject::not_found()),
+            match node.lookup(key).await {
+                Ok(value) => {
+                    let b = Response::builder();
+                    let resp = if let Some(v) = value {
+                        b.status(warp::http::StatusCode::OK).body(v)
+                    } else {
+                        b.status(warp::http::StatusCode::NOT_FOUND)
+                            .body("".to_string())
+                    };
+                    Ok(resp.unwrap())
+                }
+                Err(err) => {
+                    eprintln!("error in lookup: {:?}", err);
+                    Err(warp::reject::reject())
+                }
             }
         }
     });
@@ -113,9 +131,10 @@ async fn main() {
 
     let webserver = warp::serve(get.or(put).or(neighbors)).bind(opt.webserver_adress);
     let stabilize_node = chord_node.clone();
-    let stabilizer = async {
+
+    let stabilizer_task = async {
         loop {
-            sleep(Duration::from_secs(5)).await;
+            sleep(Duration::from_secs(opt.stabilization_period)).await;
             if let Err(err) = stabilize_node.stabilize().await {
                 println!("error: {:?}", err);
             }
@@ -129,7 +148,7 @@ async fn main() {
         val = webserver => {
             println!("webserver shut down: {:?}",val);
         },
-        val = stabilizer => {
+        val = stabilizer_task => {
             println!("stabilizer shut down: {:?}",val);
         },
         _ = sleep(Duration::from_secs(opt.ttl * 60)) => {
