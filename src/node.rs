@@ -174,34 +174,28 @@ where
                 *pred = Some(other)
             }
         }
-
-        // TODO check if this is right?
-        // if the successor is the node itself and we just changed the predecessor
-        // then the successor should be the predecessor (only two nodes in network)
-        // otherwise the successor for the first node, that created the network,
-        // is never updated.
-        let mut succ = self.successor.lock().unwrap();
-        if succ.id == self.id && pred.is_some() {
-            println!("[{:}] updated successor to {:}", self, other.addr);
-            *succ = pred.unwrap().clone()
-        }
     }
 
     pub async fn stabilize(&self) -> Result<(), MessageError> {
         let mut successor = self.successor.lock().unwrap();
-        if self.id == successor.id {
-            // no need to send a message
-            return Ok(());
-        }
-        if let Some(x) = successor.get_predecessor().await? {
+
+        let predecessor = if self.id == successor.id {
+            *self.predecessor.lock().unwrap()
+        } else {
+            successor.get_predecessor().await?
+        };
+        if let Some(x) = predecessor {
             if x.id.is_between(self.id, successor.id) {
                 println!("[{:}] updated successor to {:}", self, x.addr);
                 *successor = x;
             }
         }
-        successor
-            .notify(Neighbor::new(self.address, self.web_address))
-            .await?;
+        // the node does not need to message itself
+        if self.id != successor.id {
+            successor
+                .notify(Neighbor::new(self.address, self.web_address))
+                .await?;
+        }
         Ok(())
     }
 

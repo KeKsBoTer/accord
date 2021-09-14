@@ -13,8 +13,9 @@ impl Identifier {
     pub fn is_between(&self, start: Identifier, end: Identifier) -> bool {
         let diff1 = end - *self;
         let diff2 = end - start;
+        let diff3 = diff2 - diff1;
 
-        diff1 < diff2
+        diff3 > Identifier::from(0)
     }
 }
 
