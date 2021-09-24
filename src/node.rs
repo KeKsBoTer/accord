@@ -13,7 +13,7 @@ use crate::{
     routing::id::{HashIdentifier, Identifier},
 };
 
-#[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize)]
 pub struct Neighbor {
     id: Identifier,
     addr: SocketAddr,
@@ -45,6 +45,9 @@ impl Neighbor {
 
     async fn notify(&self, neighbor: Neighbor) -> Result<(), MessageError> {
         handle_message!(self.addr, Message::Notify(neighbor))
+    }
+    async fn shutdown(&self) -> Result<(), MessageError> {
+        handle_message!(self.addr, Message::Shutdown)
     }
 }
 
@@ -231,6 +234,18 @@ where
         }
         self.store.lock().unwrap().insert(key, value);
         Ok(())
+    }
+
+    pub async fn shutdown(&self) {
+        let succ = self.successor.lock().unwrap();
+        if let Err(e) = succ.shutdown().await {
+            eprintln!("unable to shutdown {:}: {:?}", succ.addr, e);
+        }
+        if let Some(p) = self.predecessor.lock().unwrap().as_ref() {
+            if let Err(e) = p.shutdown().await {
+                eprintln!("unable to shutdown {:}: {:?}", succ.addr, e);
+            }
+        }
     }
 }
 

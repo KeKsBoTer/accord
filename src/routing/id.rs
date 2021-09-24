@@ -4,7 +4,7 @@ use sha2::{Digest, Sha256};
 use std::fmt::Display;
 use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6};
 use std::ops::{Add, Sub};
-#[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Serialize, Deserialize, Eq, Ord)]
 pub struct Identifier(u64);
 
 impl Identifier {

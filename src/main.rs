@@ -7,6 +7,8 @@ use warp::{http::Response, Filter};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpListener,
+    signal,
+    sync::mpsc,
     time::{sleep, Duration},
 };
 
@@ -41,6 +43,8 @@ struct Opt {
 
 #[tokio::main]
 async fn main() {
+    let (shutdown_send, mut shutdown_recv) = mpsc::unbounded_channel::<u64>();
+
     let opt = Opt::from_args();
 
     let chord_node = Arc::new(ChordNode::new(opt.address, opt.webserver_adress));
@@ -65,13 +69,15 @@ async fn main() {
             let (mut tcp_stream, _) = listener.accept().await.unwrap();
 
             let tcp_chord_node = chord_node.clone();
+            let shutdown_send_cp = shutdown_send.clone();
             tokio::spawn(async move {
                 // TODO error handling
                 let mut send_buf = Vec::with_capacity(32);
                 tcp_stream.read_to_end(&mut send_buf).await.unwrap();
                 let msg: Message = serde_cbor::from_slice(send_buf.as_slice()).unwrap();
-
-                if let Some(resp) = tcp_chord_node.handle_message(msg).await.unwrap() {
+                if msg == Message::Shutdown {
+                    shutdown_send_cp.send(0).unwrap();
+                } else if let Some(resp) = tcp_chord_node.handle_message(msg).await.unwrap() {
                     let buf = serde_cbor::to_vec(&resp).unwrap();
                     tcp_stream.write_all(&buf).await.unwrap();
                     tcp_stream.shutdown().await.unwrap();
@@ -136,7 +142,8 @@ async fn main() {
         loop {
             sleep(Duration::from_secs(opt.stabilization_period)).await;
             if let Err(err) = stabilize_node.stabilize().await {
-                println!("error: {:?}", err);
+                println!("cannot stabilize: {:?}", err);
+                shutdown_send.send(0).unwrap();
             }
         }
     };
@@ -155,5 +162,13 @@ async fn main() {
             // kill process after some time
             println!("suicide!");
         },
+        _ = signal::ctrl_c() => {
+            println!("received ctrl_c. shutting down...");
+            chord_node.shutdown().await;
+        },
+        _ = shutdown_recv.recv() => {
+            println!("Received shutdown message. Shutting down...");
+        },
     }
+    println!("exit");
 }

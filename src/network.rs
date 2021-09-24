@@ -8,7 +8,7 @@ use warp::http;
 use crate::node::Neighbor;
 use crate::routing::id::Identifier;
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Message {
     Lookup(Identifier),
     LookupResult(Neighbor),
@@ -19,6 +19,7 @@ pub enum Message {
     Notify(Neighbor),
     Ping,
     Pong,
+    Shutdown,
 }
 
 #[derive(Debug)]
