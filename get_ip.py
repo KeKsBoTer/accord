@@ -20,13 +20,14 @@ stdout,stderr = MyOut.communicate()
 # print(stdout)
 # print(stderr)
 
-arr = str(stdout, 'utf-8').split('\n')[:-1]#last one is
+available_nodes = str(stdout, 'utf-8').split('\n')[:-1] #last one is
+random.shuffle(array)
+
 
 for item in arr:
-    print(socket.gethostbyname(item),":",randomfixedport)
-
-"""
-processes = [
+    print(socket.gethostbyname(item),":",random.randint(*portspace))
+    """processes = [
     subprocess.Popen(
         ["./target/debug/accord", f"127.0.0.1:{entry_node}", f"127.0.0.1:{ws_port}", ])
 ]"""
+
