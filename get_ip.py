@@ -37,7 +37,8 @@ processes = [
         "\"",
             "./target/debug/accord",
             f"{entry_node}:{entry_node_p}"
-            f"{entry_node}:{ws_port}",]
+            f"{entry_node}:{ws_port}",
+        "\""]
         )
 ]
 
@@ -55,7 +56,8 @@ for i in range(1,(len(available_nodes[1:16])-1)):
             f"{available_nodes[i]}:{entry_node_p}"
             f"{available_nodes[i]}:{ws_port}",
             f"{available_nodes[i]}:{ws_port}",
-            "--entry-node", f"{available_nodes[0]}:{entry_node_p}","\""]
+            "--entry-node", f"{available_nodes[0]}:{entry_node_p}",
+        "\""]
         )
             # available_nodes[i] would do the trick.
 
