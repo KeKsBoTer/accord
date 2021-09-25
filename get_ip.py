@@ -46,7 +46,7 @@ processes = [
 for i in range(1,(len(available_nodes[1:16])-1)):
     time.sleep(1)
     #print(f"{socket.gethostbyname()}:{random.randint(*portspace)}")
-    processes = subprocess.Popen([
+    p = subprocess.Popen([
         f"ssh", 
         f"-f",
         f"{i}",
