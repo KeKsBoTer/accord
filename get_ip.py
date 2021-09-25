@@ -34,11 +34,7 @@ processes = [
         f"ssh", 
         f"-f",
         f"{entry_node}",
-        "\"",
-            "./target/debug/accord",
-            f"{entry_node}:{entry_node_p}",
-            f"{entry_node}:{ws_port}",
-        "\""]
+        "./target/debug/accord {entry_node}:{entry_node_p} {entry_node}:{ws_port}"]
         )
 ]
 
@@ -51,12 +47,8 @@ for i in range(1,(len(available_nodes[1:16])-1)):
         f"ssh", 
         f"-f",
         f"{i}",
-        "\"",
-            "./target/debug/accord",
-            f"{available_nodes[i]}:{entry_node_p} ",
-            f"{available_nodes[i]}:{ws_port}",
-            "--entry-node", f"{entry_node}:{entry_node_p}",
-        "\""]
+            "./target/debug/accord {available_nodes[i]}:{entry_node_p} {available_nodes[i]}:{ws_port} --entry-node {entry_node}:{entry_node_p}"
+            ]
         )
             # available_nodes[i] would do the trick.
 
