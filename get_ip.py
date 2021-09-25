@@ -35,13 +35,15 @@ for i in range(0,(len(available_nodes[1:5])-1)):
     p = subprocess.Popen([
         f"ssh", 
         f"-f",
-        f"{i}",[
+        f"{i}",
+        "\""
             "./target/debug/accord",
             f"{available_nodes[i+1]}:{entry_node_p}"
             f"{available_nodes}:{entry_node_p}",
             f"{available_nodes}:{ws_port}",
             "--entry-node", f"{available_nodes[0]}:{entry_node_p}"]])
             # available_nodes[i] would do the trick.
+        "\""
     processes.append(p)
 for p in processes:
     p.wait()
