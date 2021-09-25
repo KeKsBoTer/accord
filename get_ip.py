@@ -21,10 +21,10 @@ stdout,stderr = MyOut.communicate()
 # print(stderr)
 
 available_nodes = str(stdout, 'utf-8').split('\n')[:-1] #last one is
-random.shuffle(array)
+random.shuffle(available_nodes)
 
 
-for item in arr:
+for item in available_nodes[:5]:
     print(socket.gethostbyname(item),":",random.randint(*portspace))
     """processes = [
     subprocess.Popen(
