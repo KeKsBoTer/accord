@@ -30,7 +30,7 @@ ws_port = 52222
 entry_node = available_nodes[0]
 
 processes = [
-    subprocess.Popensubprocess.Popen([
+    subprocess.Popen([
         f"ssh", 
         f"-f",
         f"{entry_node}",
