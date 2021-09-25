@@ -26,10 +26,24 @@ random.shuffle(available_nodes)
 entry_node_p = 62222
 ws_port = 52222
 
-
 ## nodes can enter in a ordered way, to speed things up bootom oof for
 entry_node = available_nodes[0]
-for i in range(0,(len(available_nodes[1:5])-1)):
+
+processes = [
+    subprocess.Popensubprocess.Popen([
+        f"ssh", 
+        f"-f",
+        f"{entry_node}",
+        "\"",
+            "./target/debug/accord",
+            f"{entry_node}:{entry_node_p}"
+            f"{entry_node}:{ws_port}",]
+        )
+]
+
+
+
+for i in range(1,(len(available_nodes[1:16])-1)):
     time.sleep(1)
     #print(f"{socket.gethostbyname()}:{random.randint(*portspace)}")
     processes = subprocess.Popen([
@@ -38,9 +52,9 @@ for i in range(0,(len(available_nodes[1:5])-1)):
         f"{i}",
         "\"",
             "./target/debug/accord",
-            f"{available_nodes[i+1]}:{entry_node_p}"
-            f"{available_nodes}:{entry_node_p}",
-            f"{available_nodes}:{ws_port}",
+            f"{available_nodes[i]}:{entry_node_p}"
+            f"{available_nodes[i]}:{ws_port}",
+            f"{available_nodes[]}:{ws_port}",
             "--entry-node", f"{available_nodes[0]}:{entry_node_p}","\""]
         )
             # available_nodes[i] would do the trick.
