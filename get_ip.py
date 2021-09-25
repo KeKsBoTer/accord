@@ -29,7 +29,7 @@ ws_port = 52222
 
 ## nodes can enter in a ordered way, to speed things up bootom oof for
 entry_node = available_nodes[0]
-for i in (len(available_nodes[1:5])-1):
+for i in range(0,(len(available_nodes[1:5])-1)):
     time.sleep(1)
     print(f"{socket.gethostbyname(item)}:{random.randint(*portspace)}")
     p = subprocess.Popen([
@@ -45,4 +45,3 @@ for i in (len(available_nodes[1:5])-1):
     processes.append(p)
 for p in processes:
     p.wait()
-
