@@ -23,11 +23,28 @@ stdout,stderr = MyOut.communicate()
 available_nodes = str(stdout, 'utf-8').split('\n')[:-1] #last one is
 random.shuffle(available_nodes)
 
+entry_node_p = 62222
+ws_port = 52222
 
-for item in available_nodes[:5]:
-    print(socket.gethostbyname(item),":",random.randint(*portspace))
-    """processes = [
+
+## nodes can enter in a ordered way, to speed things up bootom oof for
+entry_node = available_nodes[0]
+for i in (len(available_nodes[1:5])-1):
+    time.sleep(1)
+    print(f"{socket.gethostbyname(item)}:{random.randint(*portspace)}")
+    p = [
     subprocess.Popen(
-        ["./target/debug/accord", f"127.0.0.1:{entry_node}", f"127.0.0.1:{ws_port}", ])
-]"""
+        [f"ssh", 
+        f"-f",
+        f"{i}",
+            ["./target/debug/accord",
+            f"{available_nodes[i+1]}:{entry_node_p}"
+            f"{available_nodes}:{entry_node_p}",
+            f"{available_nodes}:{entry_node_p}",
+            "--entry-node", f"{available_nodes[0]}:{entry_node_p}"])#
+            # available_nodes[i] would do the trick.
+    processes.append(p)
+
+for p in processes:
+    p.wait()
 
