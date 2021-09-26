@@ -26,7 +26,6 @@ available_nodes = str(stdout, 'utf-8').split('\n')[:-1] #last one is emty line
 random.shuffle(available_nodes)
 available_ips = list(map((lambda x : socket.gethostbyname(x)), available_nodes))
 
-
 print(available_nodes)
 print(available_ips)
 ## fixed for testing
@@ -43,8 +42,8 @@ processes = [
     subprocess.Popen([
         f"ssh",
         f"-f",
-        f"{entry_node}",
-        f"{accordpath} {entry_node}:{entry_node_p} {entry_node}:{ws_port}"],
+        f"{available_nodes[0]}",
+        f"{accordpath} {available_ips[0]}:{entry_node_p} {available_ips[0]}:{ws_port}"],
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT
         )
@@ -59,7 +58,7 @@ for i in range(1,(len(available_nodes[1:9])-1)):
         f"ssh",
         f"-f",
         f"{available_nodes[i]}",
-        f"{accordpath} {available_nodes[i]}:{entry_node_p} {available_nodes[i]}:{ws_port} --entry-node {entry_node}:{entry_node_p}"],
+        f"{accordpath} {available_ips[i]}:{entry_node_p} {available_ips[i]}:{ws_port} --entry-node {available_ips[i-1]}:{entry_node_p}"],
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT
         )
@@ -74,8 +73,7 @@ print("use just an index")
 while True:
     print(available_nodes[0:9])
     node = int(input())
-    print("62222,52222")
-    port = int(input())
+    port = ws_port
     try:
         x = requests.get(f'http://{available_nodes[node]}:{port}/neighbors')
         print(x)
