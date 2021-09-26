@@ -26,8 +26,8 @@ available_nodes = str(stdout, 'utf-8').split('\n')[:-1] #last one is emty line
 random.shuffle(available_nodes)
 available_ips = list(map((lambda x : socket.gethostbyname(x)), available_nodes))
 
-print(available_nodes)
-print(available_ips)
+#print(available_nodes)
+#print(available_ips)
 ## fixed for testing
 entry_node_p = 62222
 ws_port = 52222
@@ -52,7 +52,7 @@ processes = [
 
 for i in range(1,(len(available_nodes[1:9])-1)):
     time.sleep(1)
-    print(f"process = ssh -f {available_nodes[i]} {accordpath} {available_nodes[i]}:{entry_node_p} {available_nodes[i]}:{ws_port} --entry-node {entry_node}:{entry_node_p}")
+    print(f"process = ssh -f {available_nodes[i]} {accordpath} {available_ips[i]}:{entry_node_p} {available_ips[i]}:{ws_port} --entry-node {available_ips[i-1]}:{entry_node_p}")
     #print(f"{socket.gethostbyname()}:{random.randint(*portspace)}")
     p = subprocess.Popen([
         f"ssh",
