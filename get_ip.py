@@ -71,7 +71,7 @@ for p in processes:
 while True:
     print(available_nodes[0:9])
     print("62222,52222")
-    node = input()
+    node = int(input())
     try:
         x = requests.get(f'{available_nodes[node]}:{port}/neighbors')
         print(x)
