@@ -2,6 +2,8 @@ import socket
 import subprocess
 import random
 import time
+import requests
+
 
 portspace = (49152, 65535)
 ##
@@ -22,11 +24,14 @@ stdout,stderr = MyOut.communicate()
 
 available_nodes = str(stdout, 'utf-8').split('\n')[:-1] #last one is
 random.shuffle(available_nodes)
+## i will have a list of IP. i need to append portnumber, random orfixed
 
+## fixed for testing
 entry_node_p = 62222
 ws_port = 52222
 
 ## nodes can enter in a ordered way, to speed things up bootom oof for
+##  test fixed entry node
 entry_node = available_nodes[0]
 
 
@@ -34,7 +39,7 @@ accordpath = "./target/debug/accord"
 
 processes = [
     subprocess.Popen([
-        f"ssh", 
+        f"ssh",
         f"-f",
         f"{entry_node}",
         f"{accordpath} {entry_node}:{entry_node_p} {entry_node}:{ws_port}"],
@@ -44,21 +49,32 @@ processes = [
 ]
 
 
-for i in range(1,(len(available_nodes[1:16])-1)):
+for i in range(1,(len(available_nodes[1:9])-1)):
     time.sleep(1)
     print(f"process = ssh -f {available_nodes[i]} {accordpath} {available_nodes[i]}:{entry_node_p} {available_nodes[i]}:{ws_port} --entry-node {entry_node}:{entry_node_p}")
     #print(f"{socket.gethostbyname()}:{random.randint(*portspace)}")
     p = subprocess.Popen([
-        f"ssh", 
+        f"ssh",
         f"-f",
         f"{available_nodes[i]}",
         f"{accordpath} {available_nodes[i]}:{entry_node_p} {available_nodes[i]}:{ws_port} --entry-node {entry_node}:{entry_node_p}"],
         stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT    
+        stderr=subprocess.STDOUT
         )
         # available_nodes[i] would do the trick.
-
     processes.append(p)
 
 for p in processes:
     p.wait()
+
+# test tloop
+while True:
+    print(available_nodes[0:9])
+    print("62222,52222")
+    node = input()
+    try:
+        x = requests.get(f'{available_nodes[node]}:{port}/neighbors')
+        print(x)
+        print(f"{available_nodes[node]}:{port}/neighbors")
+    except Exception as e:
+        print(f"{str(e)} on {available_node[node]}:{port}")
