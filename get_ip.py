@@ -29,15 +29,17 @@ ws_port = 52222
 ## nodes can enter in a ordered way, to speed things up bootom oof for
 entry_node = available_nodes[0]
 
+
+accordpath = "./accordtarget/debug/accord"
+
 processes = [
     subprocess.Popen([
         f"ssh", 
         f"-f",
         f"{entry_node}",
-        "./accord/target/debug/accord {entry_node}:{entry_node_p} {entry_node}:{ws_port}"]
+        f"{accordpath} {entry_node}:{entry_node_p} {entry_node}:{ws_port}"]
         )
 ]
-
 
 
 for i in range(1,(len(available_nodes[1:16])-1)):
@@ -47,10 +49,9 @@ for i in range(1,(len(available_nodes[1:16])-1)):
         f"ssh", 
         f"-f",
         f"{i}",
-            "./accord/target/debug/accord {available_nodes[i]}:{entry_node_p} {available_nodes[i]}:{ws_port} --entry-node {entry_node}:{entry_node_p}"
-            ]
-        )
-            # available_nodes[i] would do the trick.
+        f"{accordpath} {available_nodes[i]}:{entry_node_p} {available_nodes[i]}:{ws_port} --entry-node {entry_node}:{entry_node_p}"
+        ])
+        # available_nodes[i] would do the trick.
 
     processes.append(p)
 for p in processes:
