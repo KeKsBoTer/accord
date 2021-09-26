@@ -25,7 +25,7 @@ stdout,stderr = MyOut.communicate()
 available_nodes = str(stdout, 'utf-8').split('\n')[:-1] #last one is
 random.shuffle(available_nodes)
 ## i will have a list of IP. i need to append portnumber, random orfixed
-
+print(available_nodes)
 ## fixed for testing
 entry_node_p = 62222
 ws_port = 52222
