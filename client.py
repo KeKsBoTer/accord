@@ -133,7 +133,7 @@ def walk_neighbours(start_nodes):
 def simple_check(nodes):
     print("Simple put/get check, retreiving from same node ...")
 
-    tries = 10
+    tries = 100
     pairs = generate_pairs(tries)
 
     successes = 0
@@ -210,14 +210,14 @@ def main(args):
     if len(nodes) == 0:
         raise RuntimeError("No nodes registered to connect to")
 
-    # print()
-    # simple_check(nodes)
+    print()
+    simple_check(nodes)
 
     print()
     retrieve_from_different_nodes(nodes)
 
-    # print()
-    # get_nonexistent_key(nodes)
+    print()
+    get_nonexistent_key(nodes)
 
 
 if __name__ == "__main__":

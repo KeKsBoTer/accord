@@ -1,6 +1,5 @@
 import subprocess
-import time
-from typing import Hashable
+import sys
 
 entry_node = 9000
 ws_port = 8008
@@ -11,7 +10,7 @@ def hash_ip(ip):
                                ip], stdout=subprocess.PIPE).stdout)
 
 
-nodes = [entry_node+i for i in range(16)]
+nodes = [entry_node+i for i in range(int(sys.argv[1]))]
 
 sorted_nodes = sorted(nodes, key=lambda x: hash_ip(f"127.0.0.1:{x}"))
 
