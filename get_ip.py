@@ -75,8 +75,8 @@ while True:
     node = int(input())
     port = ws_port
     try:
-        x = requests.get(f'http://{available_nodes[node]}:{port}/neighbors')
+        x = requests.get(f'http://{available_ips[node]}:{port}/neighbors')
         print(x)
-        print(f"http://{available_nodes[node]}:{port}/neighbors")
+        print(f"http://{available_ips[node]}:{port}/neighbors")
     except Exception as e:
-        print(f"{str(e)} on {available_nodes[node]}:{port}")
+        print(f"{str(e)} on {available_ips[node]}:{port}")
