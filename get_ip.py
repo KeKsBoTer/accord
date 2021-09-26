@@ -46,12 +46,12 @@ processes = [
 
 for i in range(1,(len(available_nodes[1:16])-1)):
     time.sleep(1)
-    print(f"process = ssh -f {availablenode[i]} {accordpath} {available_nodes[i]}:{entry_node_p} {available_nodes[i]}:{ws_port} --entry-node {entry_node}:{entry_node_p}")
+    print(f"process = ssh -f {available_nodes[i]} {accordpath} {available_nodes[i]}:{entry_node_p} {available_nodes[i]}:{ws_port} --entry-node {entry_node}:{entry_node_p}")
     #print(f"{socket.gethostbyname()}:{random.randint(*portspace)}")
     p = subprocess.Popen([
         f"ssh", 
         f"-f",
-        f"{availablenode[i]}",
+        f"{available_nodes[i]}",
         f"{accordpath} {available_nodes[i]}:{entry_node_p} {available_nodes[i]}:{ws_port} --entry-node {entry_node}:{entry_node_p}"],
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT    
