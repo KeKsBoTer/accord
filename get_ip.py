@@ -22,17 +22,19 @@ stdout,stderr = MyOut.communicate()
 # print(stdout)
 # print(stderr)
 
-available_nodes = str(stdout, 'utf-8').split('\n')[:-1] #last one is
+available_nodes = str(stdout, 'utf-8').split('\n')[:-1] #last one is emty line
 random.shuffle(available_nodes)
-## i will have a list of IP. i need to append portnumber, random orfixed
+available_ips = list(map((lambda x : socket.gethostbyname(x)), available_nodes))
+
+
 print(available_nodes)
+print(available_ips)
 ## fixed for testing
 entry_node_p = 62222
 ws_port = 52222
 
 ## nodes can enter in a ordered way, to speed things up bootom oof for
 ##  test fixed entry node
-entry_node = available_nodes[0]
 
 
 accordpath = "./target/debug/accord"
