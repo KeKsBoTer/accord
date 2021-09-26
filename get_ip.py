@@ -76,10 +76,7 @@ while True:
     port = ws_port
     try:
         x = requests.get(f'http://{available_ips[node]}:{port}/neighbors')
-        print(x)
-        print(x.request.url)
-        print(x.request.body)
-        print(x.request.headers)
+        print(x.content)
 
         print(f"http://{available_ips[node]}:{port}/neighbors")
     except Exception as e:
