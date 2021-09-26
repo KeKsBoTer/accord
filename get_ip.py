@@ -52,8 +52,7 @@ for i in range(1,(len(available_nodes[1:16])-1)):
         f"ssh", 
         f"-f",
         f"{i}",
-        f"{accordpath} {available_nodes[i]}:{entry_node_p} {available_nodes[i]}:{ws_port} --entry-node {entry_node}:{entry_node_p}"
-        ]
+        f"{accordpath} {available_nodes[i]}:{entry_node_p} {available_nodes[i]}:{ws_port} --entry-node {entry_node}:{entry_node_p}"],
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT    
         )
