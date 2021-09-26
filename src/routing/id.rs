@@ -11,11 +11,23 @@ impl Identifier {
     // Returns whether this identifier is between `start` (exclusive) and `end` (inclusive) on the
     // identifier ring
     pub fn is_between(&self, start: Identifier, end: Identifier) -> bool {
-        let diff1 = end - *self;
-        let diff2 = end - start;
-        let diff3 = diff2 - diff1;
+        if start < end{
+            if start < *self && *self < end{
+                return true;
+            }
+        }
+        if end < start{
+            if *self < start && *self > end{
+                return true;
+            }
+        }
+        return false;
+        
+        //let diff1 = end - *self;
+        //let diff2 = end - start;
+        //let diff3 = diff2 - diff1;
 
-        diff3 > Identifier::from(0)
+        //diff3 > Identifier::from(0)
     }
 }
 
