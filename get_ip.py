@@ -30,7 +30,7 @@ ws_port = 52222
 entry_node = available_nodes[0]
 
 
-accordpath = "./accordtarget/debug/accord"
+accordpath = "./target/debug/accord"
 
 processes = [
     subprocess.Popen([
