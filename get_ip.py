@@ -36,7 +36,7 @@ ws_port = 52222
 ##  test fixed entry node
 
 
-accordpath = "~/target/debug/accord"
+accordpath = "~/accord/target/debug/accord"
 
 processes = [
     subprocess.Popen([
