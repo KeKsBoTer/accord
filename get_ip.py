@@ -71,7 +71,7 @@ for p in processes:
 # test tloop
 print("use just an index")
 while True:
-    print(available_nodes[0:9])
+    print(available_ips[0:9])
     node = int(input())
     port = ws_port
     try:
