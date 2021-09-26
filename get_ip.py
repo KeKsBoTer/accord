@@ -77,4 +77,4 @@ while True:
         print(x)
         print(f"{available_nodes[node]}:{port}/neighbors")
     except Exception as e:
-        print(f"{str(e)} on {available_node[node]}:{port}")
+        print(f"{str(e)} on {available_nodes[node]}:{port}")
