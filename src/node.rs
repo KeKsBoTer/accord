@@ -60,7 +60,7 @@ where
     predecessor: Mutex<Option<Neighbor>>,
     successor: Mutex<Neighbor>,
 
-    id: Identifier,
+    pub id: Identifier,
     store: Mutex<HashMap<Key, Value>>,
 }
 
@@ -70,12 +70,19 @@ where
     Value: Clone + FromStr + ToString,
     <Value as FromStr>::Err: fmt::Debug,
 {
-    pub fn new(addr: SocketAddr, web_addr: SocketAddr) -> Self {
+    pub fn new(
+        addr: SocketAddr,
+        web_addr: SocketAddr,
+        predecessor: SocketAddr,
+        predecessor_ws: SocketAddr,
+        successor: SocketAddr,
+        successor_ws: SocketAddr,
+    ) -> Self {
         Node {
             address: addr,
             web_address: web_addr,
-            predecessor: Mutex::new(None),
-            successor: Mutex::new(Neighbor::new(addr, web_addr)),
+            predecessor: Mutex::new(Some(Neighbor::new(predecessor, predecessor_ws))),
+            successor: Mutex::new(Neighbor::new(successor, successor_ws)),
 
             id: addr.hash_id(),
             store: Mutex::new(HashMap::<Key, Value>::new()),
@@ -83,12 +90,9 @@ where
     }
 
     fn contains_id(&self, id: Identifier) -> bool {
-        self.predecessor
-            .lock()
-            .unwrap()
-            .as_ref()
-            .map(|n| id.is_between(self.id, n.id))
-            .unwrap_or(true) // TODO is this right?
+        let pred = self.predecessor.lock().unwrap();
+
+        pred.map(|n| id.is_between(n.id, self.id)).unwrap_or(true) // TODO is this right?
     }
 
     // finds the value for a given key within the chord ring
@@ -102,7 +106,7 @@ where
             let addr = succ.find_successor(id).await?;
             let client = Client::new();
 
-            let url: Uri = format!("http://{:}/get/{:}", addr.web_addr, key.to_string())
+            let url: Uri = format!("http://{:}/storage/{:}", addr.web_addr, key.to_string())
                 .parse()
                 .unwrap();
 
@@ -152,10 +156,11 @@ where
     }
 
     async fn find_successor(&self, id: Identifier) -> Result<Neighbor, MessageError> {
-        if self.contains_id(id) {
+        let succ = self.successor.lock().unwrap().clone();
+
+        if self.contains_id(id) || succ.id == self.id {
             Ok(Neighbor::new(self.address, self.web_address))
         } else {
-            let succ = self.successor.lock().unwrap().clone();
             succ.find_successor(id).await
         }
     }
@@ -186,7 +191,7 @@ where
         };
         if let Some(x) = predecessor {
             if x.id.is_between(self.id, successor.id) {
-                println!("[{:}] updated successor to {:}", self, x.addr);
+                println!("[{:}|{:}] updated successor to {:}", self, self.id, x.addr);
                 *successor = x;
             }
         }
@@ -212,7 +217,7 @@ where
             let addr = succ.find_successor(id).await?;
             let client = Client::new();
 
-            let url: Uri = format!("http://{:}/put/{:}", addr.web_addr, key.to_string())
+            let url: Uri = format!("http://{:}/storage/{:}", addr.web_addr, key.to_string())
                 .parse()
                 .unwrap();
 
@@ -241,6 +246,6 @@ where
     <Value as FromStr>::Err: fmt::Debug,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!("({:}|{:x})", self.address, u64::from(self.id)))
+        f.write_fmt(format_args!("{:})", self.address))
     }
 }

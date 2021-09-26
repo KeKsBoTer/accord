@@ -21,15 +21,17 @@ struct Opt {
     #[structopt(name = "address-adress", help = "webserver address to bind to")]
     webserver_adress: SocketAddr,
 
-    #[structopt(long, help = "address of entry node")]
-    entry_node: Option<SocketAddr>,
+    #[structopt(name = "predecessor", help = "webserver address to bind to")]
+    predecessor: SocketAddr,
 
-    #[structopt(
-        long,
-        default_value = "5",
-        help = "duration (seconds) between stabilization runs"
-    )]
-    stabilization_period: u64,
+    #[structopt(name = "predecessor_ws", help = "webserver address to bind to")]
+    predecessor_ws: SocketAddr,
+
+    #[structopt(name = "successor", help = "webserver address to bind to")]
+    successor: SocketAddr,
+
+    #[structopt(name = "successor_ws", help = "webserver address to bind to")]
+    successor_ws: SocketAddr,
 
     #[structopt(
         long,
@@ -43,20 +45,14 @@ struct Opt {
 async fn main() {
     let opt = Opt::from_args();
 
-    let chord_node = Arc::new(ChordNode::new(opt.address, opt.webserver_adress));
-    if let Some(entry_node) = opt.entry_node {
-        if let Err(err) = chord_node.join(entry_node).await {
-            println!("cannot join network: {:?}", err);
-            return;
-        } else {
-            println!(
-                "{:} joined chord network {:}",
-                chord_node.address, entry_node
-            );
-        }
-    } else {
-        println!("creating new chord network {:}", chord_node.address);
-    }
+    let chord_node = Arc::new(ChordNode::new(
+        opt.address,
+        opt.webserver_adress,
+        opt.predecessor,
+        opt.predecessor_ws,
+        opt.successor,
+        opt.successor_ws,
+    ));
 
     // TODO move in own function / component
     let listener = TcpListener::bind(opt.address).await.unwrap();
@@ -66,7 +62,6 @@ async fn main() {
 
             let tcp_chord_node = chord_node.clone();
             tokio::spawn(async move {
-                // TODO error handling
                 let mut send_buf = Vec::with_capacity(32);
                 tcp_stream.read_to_end(&mut send_buf).await.unwrap();
                 let msg: Message = serde_cbor::from_slice(send_buf.as_slice()).unwrap();
@@ -117,9 +112,13 @@ async fn main() {
             async move {
                 let body = std::str::from_utf8(&value).unwrap();
                 let ok = node.put(key, body.to_string()).await;
+
                 match ok {
                     Ok(_) => Ok("ok"),
-                    Err(_) => Err(warp::reject::reject()), // TODO return 500
+                    Err(e) => {
+                        eprintln!("{:?}", e);
+                        Err(warp::reject::reject())
+                    }
                 }
             }
         });
@@ -130,16 +129,6 @@ async fn main() {
         .map(move || warp::reply::json(&n_chord_node.neighbors()));
 
     let webserver = warp::serve(get.or(put).or(neighbors)).bind(opt.webserver_adress);
-    let stabilize_node = chord_node.clone();
-
-    let stabilizer_task = async {
-        loop {
-            sleep(Duration::from_secs(opt.stabilization_period)).await;
-            if let Err(err) = stabilize_node.stabilize().await {
-                println!("error: {:?}", err);
-            }
-        }
-    };
 
     tokio::select! {
         val = chord_server => {
@@ -147,9 +136,6 @@ async fn main() {
         },
         val = webserver => {
             println!("webserver shut down: {:?}",val);
-        },
-        val = stabilizer_task => {
-            println!("stabilizer shut down: {:?}",val);
         },
         _ = sleep(Duration::from_secs(opt.ttl * 60)) => {
             // kill process after some time

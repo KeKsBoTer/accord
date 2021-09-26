@@ -23,3 +23,8 @@ path = "src/lib.rs"
 [[bin]]
 name = "accord"
 path = "src/main.rs"
+
+
+[[bin]]
+name = "hasher"
+path = "src/hash.rs"

@@ -5,23 +5,34 @@ use std::fmt::Display;
 use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6};
 use std::ops::{Add, Sub};
 #[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Serialize, Deserialize)]
-pub struct Identifier(u64);
+pub struct Identifier(pub u64);
 
 impl Identifier {
     // Returns whether this identifier is between `start` (exclusive) and `end` (inclusive) on the
     // identifier ring
     pub fn is_between(&self, start: Identifier, end: Identifier) -> bool {
-        let diff1 = end - *self;
-        let diff2 = end - start;
-        let diff3 = diff2 - diff1;
+        let xint = self.0 as i128;
+        let maxint = end.0 as i128;
+        let minint = start.0 as i128;
 
-        diff3 > Identifier::from(0)
+        if xint > minint && maxint > xint {
+            return true;
+        }
+
+        if maxint > xint && minint > maxint {
+            return true;
+        }
+
+        if minint > maxint && xint > minint {
+            return true;
+        }
+        return false;
     }
 }
 
 impl Display for Identifier {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0.to_string())
+        f.write_str(&(self.0 / 36028797018963968).to_string())
     }
 }
 
