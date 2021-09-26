@@ -75,8 +75,8 @@ while True:
     print("62222,52222")
     port = int(input())
     try:
-        x = requests.get(f'{available_nodes[node]}:{port}/neighbors')
+        x = requests.get(f'http://{available_nodes[node]}:{port}/neighbors')
         print(x)
-        print(f"{available_nodes[node]}:{port}/neighbors")
+        print(f"http://{available_nodes[node]}:{port}/neighbors")
     except Exception as e:
         print(f"{str(e)} on {available_nodes[node]}:{port}")
