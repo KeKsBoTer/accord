@@ -77,6 +77,10 @@ while True:
     try:
         x = requests.get(f'http://{available_ips[node]}:{port}/neighbors')
         print(x)
+        print(x.request.url)
+        print(x.request.body)
+        print(x.request.headers)
+
         print(f"http://{available_ips[node]}:{port}/neighbors")
     except Exception as e:
         print(f"{str(e)} on {available_ips[node]}:{port}")
