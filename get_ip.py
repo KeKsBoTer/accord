@@ -68,10 +68,12 @@ for p in processes:
     p.wait()
 
 # test tloop
+print("use just an index")
 while True:
     print(available_nodes[0:9])
-    print("62222,52222")
     node = int(input())
+    print("62222,52222")
+    port = int(input())
     try:
         x = requests.get(f'{available_nodes[node]}:{port}/neighbors')
         print(x)
