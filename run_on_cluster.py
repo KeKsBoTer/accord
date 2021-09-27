@@ -23,11 +23,14 @@ available_ips = list(map((lambda x : socket.gethostbyname(x)), available_nodes))
 
 #nodes = [entry_node+i for i in range(int(sys.argv[1]))]
 nodes = available_ips[:int(sys.argv[1])]
-port = 65343
+
+#port = 65343
+port = random.randint(59152,65535)
 
 sorted_nodes = sorted(nodes, key=lambda x: hash_ip(f"{x}:{port}"))
 print(sorted_nodes)
-print("qua sopra i nodi")
+print("nodes here")
+print(f"ports = {port}, {port-10000}")
 
 processes = []
 
@@ -50,7 +53,7 @@ for i in range(0, len(nodes)):
         "-f",
         f"{n}",
         " ".join(eachnodecmd)]
-    print(cmd)
+    #print(cmd)
     p = subprocess.Popen(cmd)
 
     processes.append(p)
