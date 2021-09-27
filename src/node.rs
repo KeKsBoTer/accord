@@ -3,7 +3,12 @@ use std::fmt::{self, Display};
 use std::hash::Hash;
 use std::net::SocketAddr;
 use std::str::FromStr;
+use std::sync::Arc;
 use std::{collections::HashMap, sync::Mutex};
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    net::TcpListener,
+};
 use warp::http;
 use warp::hyper::{Client, Uri};
 
@@ -40,8 +45,8 @@ impl Neighbor {
 #[derive(Debug)]
 pub struct Node<Key, Value>
 where
-    Key: Eq + Hash + HashIdentifier<Identifier> + ToString,
-    Value: Clone + FromStr + ToString,
+    Key: Eq + Hash + HashIdentifier<Identifier> + ToString + Send + Sync + 'static,
+    Value: Clone + FromStr + ToString + Send + Sync + 'static,
     <Value as FromStr>::Err: fmt::Debug,
 {
     pub address: SocketAddr,
@@ -55,8 +60,8 @@ where
 
 impl<Key, Value> Node<Key, Value>
 where
-    Key: Eq + Hash + HashIdentifier<Identifier> + ToString,
-    Value: Clone + FromStr + ToString,
+    Key: Eq + Hash + HashIdentifier<Identifier> + ToString + Send + Sync + 'static,
+    Value: Clone + FromStr + ToString + Send + Sync + 'static,
     <Value as FromStr>::Err: fmt::Debug,
 {
     pub fn new(
@@ -96,7 +101,6 @@ where
                 .parse()
                 .unwrap();
 
-            // TODO error handling
             let res = client.get(url).await.unwrap();
             match res.status() {
                 http::StatusCode::NOT_FOUND => Ok(None),
@@ -149,7 +153,6 @@ where
                 .method(http::Method::PUT)
                 .body(payload)
                 .unwrap();
-            // TODO error handling
             let res = client.request(req).await.unwrap();
             return match res.status() {
                 http::StatusCode::OK => Ok(()),
@@ -161,10 +164,34 @@ where
     }
 }
 
+pub async fn message_listener<Key, Value>(node: Arc<Node<Key, Value>>)
+where
+    Key: Eq + Hash + HashIdentifier<Identifier> + ToString + Send + Sync + 'static,
+    Value: Clone + FromStr + ToString + Send + Sync + 'static,
+    <Value as FromStr>::Err: fmt::Debug,
+{
+    let listener = TcpListener::bind(node.address).await.unwrap();
+    loop {
+        let (mut tcp_stream, _) = listener.accept().await.unwrap();
+        let tcp_chord_node = node.clone();
+        tokio::spawn(async move {
+            let mut send_buf = Vec::with_capacity(32);
+            tcp_stream.read_to_end(&mut send_buf).await.unwrap();
+            let msg: Message = serde_cbor::from_slice(send_buf.as_slice()).unwrap();
+
+            if let Some(resp) = tcp_chord_node.handle_message(msg).await.unwrap() {
+                let buf = serde_cbor::to_vec(&resp).unwrap();
+                tcp_stream.write_all(&buf).await.unwrap();
+                tcp_stream.shutdown().await.unwrap();
+            }
+        });
+    }
+}
+
 impl<Key, Value> Display for Node<Key, Value>
 where
-    Key: Eq + Hash + HashIdentifier<Identifier> + ToString,
-    Value: Clone + FromStr + ToString,
+    Key: Eq + Hash + HashIdentifier<Identifier> + ToString + Send + Sync + 'static,
+    Value: Clone + FromStr + ToString + Send + Sync + 'static,
     <Value as FromStr>::Err: fmt::Debug,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

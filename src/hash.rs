@@ -1,11 +1,14 @@
+// A small tool used to calculate the hashes within the python script
+// to calculate the predecessors and succesors for each node
+
 use accord::routing::id::HashIdentifier;
 use std::net::SocketAddr;
 use structopt::StructOpt;
 
 #[derive(StructOpt)]
-#[structopt(name = "hasher", about = "Chord Node Process")]
+#[structopt(name = "hasher", about = "chord hash generator for nodes")]
 struct Opt {
-    #[structopt(name = "hash", help = "address to bind to")]
+    #[structopt(name = "adress", help = "address and port")]
     address: SocketAddr,
 }
 

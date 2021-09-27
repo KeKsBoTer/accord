@@ -1,8 +1,7 @@
 use serde::{Deserialize, Serialize};
-use std::future::Future;
 use std::net::SocketAddr;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::{TcpListener, TcpStream};
+use tokio::net::TcpStream;
 use warp::http;
 
 use crate::node::Neighbor;
@@ -48,28 +47,6 @@ pub async fn send_message(msg: Message, addr: SocketAddr) -> Result<Option<Messa
     } else {
         let answer: Message = serde_cbor::from_slice(resp_buf.as_slice())?;
         Ok(Some(answer))
-    }
-}
-
-pub async fn listen_for_messages<F, Fut>(addr: SocketAddr, handler: F) -> Result<(), MessageError>
-where
-    F: Fn(Message) -> Fut,
-    Fut: Future<Output = Option<Message>>,
-{
-    let listener = TcpListener::bind(addr).await?;
-    loop {
-        let (mut tcp_stream, _) = listener.accept().await?;
-
-        // TODO error handling
-        let mut send_buf = Vec::with_capacity(32);
-        tcp_stream.read_to_end(&mut send_buf).await.unwrap();
-        let msg: Message = serde_cbor::from_slice(send_buf.as_slice()).unwrap();
-
-        if let Some(resp) = handler(msg).await {
-            let buf = serde_cbor::to_vec(&resp).unwrap();
-            tcp_stream.write_all(&buf).await.unwrap();
-            tcp_stream.shutdown().await.unwrap();
-        }
     }
 }
 
