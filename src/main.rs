@@ -54,7 +54,6 @@ async fn main() {
         opt.successor_ws,
     ));
 
-    // TODO move in own function / component
     let listener = TcpListener::bind(opt.address).await.unwrap();
     let chord_server = async {
         loop {
@@ -75,7 +74,6 @@ async fn main() {
         }
     };
 
-    // TODO move in own component / function
     let storage_api = warp::path!("storage" / String);
 
     let get_chord_node = chord_node.clone();

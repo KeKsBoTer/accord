@@ -3,27 +3,22 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::fmt::Display;
 use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6};
-use std::ops::{Add, Sub};
 #[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Serialize, Deserialize)]
-pub struct Identifier(pub u64);
+pub struct Identifier(u64);
 
 impl Identifier {
     // Returns whether this identifier is between `start` (exclusive) and `end` (inclusive) on the
     // identifier ring
     pub fn is_between(&self, start: Identifier, end: Identifier) -> bool {
-        let xint = self.0 as i128;
-        let maxint = end.0 as i128;
-        let minint = start.0 as i128;
-
-        if xint > minint && maxint > xint {
+        if *self > start && end >= *self {
             return true;
         }
 
-        if maxint > xint && minint > maxint {
+        if end >= *self && start > end {
             return true;
         }
 
-        if minint > maxint && xint > minint {
+        if start > end && *self > start {
             return true;
         }
         return false;
@@ -32,7 +27,7 @@ impl Identifier {
 
 impl Display for Identifier {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&(self.0 / 36028797018963968).to_string())
+        f.write_str(&self.0.to_string())
     }
 }
 
@@ -54,26 +49,6 @@ impl From<&[u8]> for Identifier {
         let id = BigUint::from_bytes_le(digest.as_slice());
         let ring = id % std::u64::MAX;
         Identifier(*ring.to_u64_digits().first().unwrap())
-    }
-}
-
-impl Add for Identifier {
-    type Output = Self;
-
-    fn add(self, other: Self) -> Self {
-        let (sum, _) = self.0.overflowing_add(other.0);
-
-        Identifier(sum)
-    }
-}
-
-impl Sub for Identifier {
-    type Output = Self;
-
-    fn sub(self, other: Self) -> Self {
-        let (diff, _) = self.0.overflowing_sub(other.0);
-
-        Identifier(diff)
     }
 }
 

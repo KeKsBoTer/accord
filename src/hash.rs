@@ -12,5 +12,5 @@ struct Opt {
 #[tokio::main]
 async fn main() {
     let opt = Opt::from_args();
-    println!("{:}", opt.address.hash_id().0);
+    println!("{:}", opt.address.hash_id());
 }

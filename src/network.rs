@@ -12,13 +12,6 @@ use crate::routing::id::Identifier;
 pub enum Message {
     Lookup(Identifier),
     LookupResult(Neighbor),
-
-    GetPredecessor,
-    PredecessorResponse(Option<Neighbor>),
-
-    Notify(Neighbor),
-    Ping,
-    Pong,
 }
 
 #[derive(Debug)]
