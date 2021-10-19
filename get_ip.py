@@ -15,7 +15,8 @@ cmd = ["/share/apps/ifi/available-nodes.sh"]
 MyOut = subprocess.Popen(
     cmd,
     stdout=subprocess.PIPE,
-    stderr=subprocess.STDOUT
+    stderr=subprocess.STDOUT,
+    bufsize=1, universal_newlines=True
 )
 
 stdout,stderr = MyOut.communicate()
@@ -45,7 +46,8 @@ processes = [
         f"{available_nodes[0]}",
         f"{accordpath} {available_ips[0]}:{entry_node_p} {available_ips[0]}:{ws_port}"],
         stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT
+        stderr=subprocess.STDOUT,
+        bufsize=1, universal_newlines=True
         )
 ]
 
