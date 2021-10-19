@@ -11,11 +11,21 @@ impl Identifier {
     // Returns whether this identifier is between `start` (exclusive) and `end` (inclusive) on the
     // identifier ring
     pub fn is_between(&self, start: Identifier, end: Identifier) -> bool {
-        let diff1 = end - *self;
-        let diff2 = end - start;
-        let diff3 = diff2 - diff1;
+        if start == end {
+            return true;
+        }
+        if *self > start && end >= *self {
+            return true;
+        }
 
-        diff3 > Identifier::from(0)
+        if end >= *self && start > end {
+            return true;
+        }
+
+        if start > end && *self > start {
+            return true;
+        }
+        return false;
     }
 }
 
@@ -42,7 +52,7 @@ impl From<&[u8]> for Identifier {
         let digest = Sha256::digest(bytes);
         let id = BigUint::from_bytes_le(digest.as_slice());
         let ring = id % std::u64::MAX;
-        Identifier(*ring.to_u64_digits().first().unwrap())
+        Identifier(*ring.to_u64_digits().first().unwrap() as u64)
     }
 }
 

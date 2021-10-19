@@ -26,7 +26,7 @@ struct Opt {
 
     #[structopt(
         long,
-        default_value = "5",
+        default_value = "1",
         help = "duration (seconds) between stabilization runs"
     )]
     stabilization_period: u64,

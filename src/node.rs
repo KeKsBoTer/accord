@@ -88,7 +88,7 @@ where
             .unwrap()
             .as_ref()
             .map(|n| id.is_between(self.id, n.id))
-            .unwrap_or(true) // TODO is this right?
+            .unwrap_or(true)
     }
 
     // finds the value for a given key within the chord ring
@@ -102,7 +102,7 @@ where
             let addr = succ.find_successor(id).await?;
             let client = Client::new();
 
-            let url: Uri = format!("http://{:}/get/{:}", addr.web_addr, key.to_string())
+            let url: Uri = format!("http://{:}/storage/{:}", addr.web_addr, key.to_string())
                 .parse()
                 .unwrap();
 
@@ -124,6 +124,7 @@ where
     pub async fn handle_message(&self, msg: Message) -> Result<Option<Message>, MessageError> {
         match msg {
             Message::Lookup(id) => {
+                // TODO failes
                 let responsible_node = self.find_successor(id).await?;
                 Ok(Some(Message::LookupResult(responsible_node)))
             }
@@ -142,9 +143,14 @@ where
     }
 
     pub async fn join(&self, entry_node: SocketAddr) -> Result<(), MessageError> {
+        if entry_node == self.address {
+            // node does not need to join itself
+            return Ok(());
+        }
         let neighbor = Neighbor::new(entry_node, entry_node);
         let mut pred = self.predecessor.lock().unwrap();
         *pred = None;
+        // TODO can fail if entry_node == self
         let new_succ = neighbor.find_successor(self.id).await?;
         let mut succ = self.successor.lock().unwrap();
         *succ = new_succ;
@@ -156,7 +162,11 @@ where
             Ok(Neighbor::new(self.address, self.web_address))
         } else {
             let succ = self.successor.lock().unwrap().clone();
-            succ.find_successor(id).await
+            if succ.id == self.id {
+                Ok(Neighbor::new(self.address, self.web_address))
+            } else {
+                succ.find_successor(id).await
+            }
         }
     }
 
@@ -201,7 +211,6 @@ where
 
     pub fn neighbors(&self) -> Vec<SocketAddr> {
         let succ = self.successor.lock().unwrap();
-        // TODO return web api port, not chord port
         vec![succ.web_addr]
     }
 
@@ -212,7 +221,7 @@ where
             let addr = succ.find_successor(id).await?;
             let client = Client::new();
 
-            let url: Uri = format!("http://{:}/put/{:}", addr.web_addr, key.to_string())
+            let url: Uri = format!("http://{:}/storage/{:}", addr.web_addr, key.to_string())
                 .parse()
                 .unwrap();
 
@@ -241,6 +250,6 @@ where
     <Value as FromStr>::Err: fmt::Debug,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!("({:}|{:x})", self.address, u64::from(self.id)))
+        f.write_fmt(format_args!("({:}|{:})", self.address, u64::from(self.id)))
     }
 }
