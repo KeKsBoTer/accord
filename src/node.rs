@@ -16,8 +16,8 @@ use crate::{
 #[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
 pub struct Neighbor {
     id: Identifier,
-    addr: SocketAddr,
-    web_addr: SocketAddr,
+    pub addr: SocketAddr,
+    pub web_addr: SocketAddr,
 }
 
 impl Neighbor {
@@ -57,10 +57,10 @@ where
 {
     pub address: SocketAddr,
     pub web_address: SocketAddr,
-    predecessor: Mutex<Option<Neighbor>>,
-    successor: Mutex<Neighbor>,
+    pub predecessor: Mutex<Option<Neighbor>>,
+    pub successor: Mutex<Neighbor>,
 
-    id: Identifier,
+    pub id: Identifier,
     store: Mutex<HashMap<Key, Value>>,
 }
 

@@ -1,7 +1,9 @@
 use accord::{network::Message, node::Node};
+use serde::Serialize;
 use std::{net::SocketAddr, sync::Arc};
 use structopt::StructOpt;
 use warp::hyper::body::Bytes;
+use warp::reply::Json;
 use warp::{http::Response, Filter};
 
 use tokio::{
@@ -75,6 +77,27 @@ async fn api_put(
     }
 }
 
+#[derive(Serialize)]
+struct InfoReponse {
+    node_hash: String,
+    successor: SocketAddr,
+    others: Vec<SocketAddr>,
+}
+
+fn api_info(node: Arc<ChordNode>) -> Json {
+    let succ = node.successor.lock().unwrap();
+    let mut resp = InfoReponse {
+        node_hash: format!("{:x}", u64::from(node.id)),
+        successor: succ.web_addr,
+        others: Vec::with_capacity(1),
+    };
+    let pred = node.predecessor.lock().unwrap();
+    if pred.is_some() {
+        resp.others.push(pred.unwrap().web_addr);
+    }
+    return warp::reply::json(&resp);
+}
+
 #[tokio::main]
 async fn main() {
     let opt = Opt::from_args();
@@ -129,12 +152,12 @@ async fn main() {
         .and(warp::body::bytes())
         .and_then(move |key: String, value: Bytes| api_put(put_chord_node.clone(), key, value));
 
-    let n_chord_node = chord_node.clone();
-    let neighbors = warp::path!("neighbors")
+    let info_chord_node = chord_node.clone();
+    let info = warp::path!("node-info")
         .and(warp::get())
-        .map(move || warp::reply::json(&n_chord_node.neighbors()));
+        .map(move || api_info(info_chord_node.clone()));
 
-    let webserver = warp::serve(get.or(put).or(neighbors)).bind(opt.webserver_adress);
+    let webserver = warp::serve(get.or(put).or(info)).bind(opt.webserver_adress);
     let stabilize_node = chord_node.clone();
 
     let stabilizer_task = async {
