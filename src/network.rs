@@ -16,6 +16,11 @@ pub enum Message {
     GetPredecessor,
     PredecessorResponse(Option<Neighbor>),
 
+    // message sent to successor when a node leaves
+    LeavePredecessor(Neighbor),
+    // message sent to predecessor when a node leaves
+    LeaveSuccessor(Neighbor),
+
     Notify(Neighbor),
     Ping,
     Pong,
