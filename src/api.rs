@@ -4,6 +4,8 @@ use warp::hyper::body::Bytes;
 
 use serde::{Deserialize, Serialize};
 use warp::http::Response;
+use warp::hyper::body::to_bytes;
+use warp::hyper::{Client, Uri};
 use warp::reply::Json;
 use warp::Filter;
 
@@ -47,21 +49,23 @@ pub async fn put(
     }
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 struct InfoReponse {
     node_hash: String,
     successor: SocketAddr,
+    chord_address: SocketAddr,
     others: Vec<SocketAddr>,
 }
 
 pub async fn info(node: Arc<ChordNode>) -> Result<Json, warp::Rejection> {
-    let succ = node.successor.lock().await;
+    let succ = { node.successor.lock().await.clone() };
     let mut resp = InfoReponse {
         node_hash: format!("{:x}", u64::from(node.id)),
         successor: succ.web_addr,
         others: Vec::with_capacity(1),
+        chord_address: node.address,
     };
-    let pred = node.predecessor.lock().await;
+    let pred = { node.predecessor.lock().await.clone() };
     if pred.is_some() {
         resp.others.push(pred.unwrap().web_addr);
     }
@@ -79,30 +83,57 @@ pub async fn join(
     node: Arc<ChordNode>,
     req: JoinRequest,
 ) -> Result<Response<String>, warp::Rejection> {
+    let client = Client::new();
+
+    let url: Uri = format!("http://{:}/node-info", req.nprime).parse().unwrap();
+
+    let ok: bool;
+    let mut err_str: String = "".to_string();
+
     let b = Response::builder();
-    // TODO right now the node joins the address given as http GET param
-    // this is the web address of the node though
-    // change to use the chord address of the node
-    // maybe add api to retrieve chord address first?
-    if let Err(err) = node.join(req.nprime).await {
-        eprintln!("[{:}] cannot join network: {:?}", node.address, err);
-        Ok(b.status(warp::http::StatusCode::INTERNAL_SERVER_ERROR)
-            .body("cannot leave network".to_string())
-            .unwrap())
-    } else {
+
+    // TODO fix this ugly code
+    match client.get(url).await {
+        Ok(mut resp) => match to_bytes(resp.body_mut()).await {
+            Ok(body_bytes) => match serde_json::from_slice::<InfoReponse>(&body_bytes) {
+                Ok(info) => {
+                    if let Err(err) = node.join(info.chord_address).await {
+                        err_str = format!("{:?}", err);
+                        ok = false;
+                    } else {
+                        ok = true;
+                    }
+                }
+                Err(err) => {
+                    err_str = format!("{:?}", err);
+                    ok = false;
+                }
+            },
+            Err(err) => {
+                err_str = format!("{:?}", err);
+                ok = false;
+            }
+        },
+        Err(err) => {
+            err_str = format!("{:?}", err);
+            ok = false;
+        }
+    }
+    if ok {
         println!("[{:}] joined chord network {:}", node.address, req.nprime);
         Ok(b.status(warp::http::StatusCode::OK)
             .body("ok".to_string())
+            .unwrap())
+    } else {
+        println!("[{:}] cannot join chord network {:}", node.address, err_str);
+        Ok(b.status(warp::http::StatusCode::INTERNAL_SERVER_ERROR)
+            .body("cannot join network".to_string())
             .unwrap())
     }
 }
 
 pub async fn leave(node: Arc<ChordNode>) -> Result<Response<String>, warp::Rejection> {
     let b = Response::builder();
-    // TODO right now the node joins the address given as http GET param
-    // this is the web address of the node though
-    // change to use the chord address of the node
-    // maybe add api to retrieve chord address first?
     if let Err(err) = node.leave().await {
         eprintln!("[{:}] cannot leave network: {:?}", node.address, err);
         Ok(b.status(warp::http::StatusCode::INTERNAL_SERVER_ERROR)
@@ -142,5 +173,12 @@ pub async fn serve(addr: SocketAddr, node: Arc<ChordNode>) {
         .and(warp::get())
         .and_then(move |req: JoinRequest| join(join_chord_node.clone(), req));
 
-    warp::serve(get.or(put).or(info).or(join)).bind(addr).await;
+    let leave_chord_node = node.clone();
+    let leave = warp::path!("leave")
+        .and(warp::get())
+        .and_then(move || leave(leave_chord_node.clone()));
+
+    warp::serve(get.or(put).or(info).or(join).or(leave))
+        .bind(addr)
+        .await;
 }

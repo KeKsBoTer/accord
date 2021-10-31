@@ -72,7 +72,6 @@ where
     loop {
         let (mut tcp_stream, _) = listener.accept().await?;
 
-        // TODO error handling
         let mut send_buf = Vec::with_capacity(32);
         tcp_stream.read_to_end(&mut send_buf).await.unwrap();
         let msg: Message = serde_cbor::from_slice(send_buf.as_slice()).unwrap();

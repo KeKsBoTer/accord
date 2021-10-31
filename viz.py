@@ -5,19 +5,18 @@ import requests
 
 dot = graphviz.Digraph(comment='Chord Ring')
 
-queue = set([8000])
+queue = set([8002])
 visited = set()
 
 while len(queue) > 0:
     node = queue.pop()
     dot.node(str(node), f'localhost:{node}')
-    x = requests.get(f'http://localhost:{node}/neighbors')
+    x = requests.get(f'http://localhost:{node}/node-info')
 
-    successors = [int(s.split(":")[1]) for s in x.json()]
-    for s in successors:
-        if s not in visited:
-            queue.add(s)
-        dot.edge(str(node), str(s))
+    successor = int(x.json()["successor"].split(":")[1])
+    if successor not in visited:
+        queue.add(successor)
+    dot.edge(str(node), str(successor))
     visited.add(node)
     print("visisted", node)
 

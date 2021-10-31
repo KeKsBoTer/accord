@@ -20,8 +20,8 @@ struct Opt {
 
     #[structopt(
         long,
-        default_value = "1",
-        help = "duration (seconds) between stabilization runs"
+        default_value = "1000",
+        help = "duration (millisecods) between stabilization runs"
     )]
     stabilization_period: u64,
 
@@ -38,7 +38,7 @@ async fn main() {
     let opt = Opt::from_args();
 
     let chord_node = Arc::new(api::ChordNode::new(opt.address, opt.webserver_adress));
-    println!("creating new chord network {:}", chord_node.address);
+    println!("[{:}] creating new chord network", chord_node.address);
 
     let listener = TcpListener::bind(opt.address).await.unwrap();
     let chord_server = async {
@@ -47,7 +47,6 @@ async fn main() {
 
             let tcp_chord_node = chord_node.clone();
             tokio::spawn(async move {
-                // TODO error handling
                 let mut send_buf = Vec::with_capacity(32);
                 tcp_stream.read_to_end(&mut send_buf).await.unwrap();
                 let msg: Message = serde_cbor::from_slice(send_buf.as_slice()).unwrap();
@@ -64,7 +63,7 @@ async fn main() {
     let stabilize_node = chord_node.clone();
     let stabilizer_task = async {
         loop {
-            sleep(Duration::from_secs(opt.stabilization_period)).await;
+            sleep(Duration::from_millis(opt.stabilization_period)).await;
             if let Err(err) = stabilize_node.stabilize().await {
                 println!("error: {:?}", err);
             }

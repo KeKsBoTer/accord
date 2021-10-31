@@ -1,1 +1,5 @@
 /target
+*.gv
+*.gv.pdf
+.vscode/
+**/.DS_Store

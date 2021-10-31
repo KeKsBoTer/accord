@@ -110,7 +110,7 @@ where
             let value = self.store.lock().await.get(&key).map(|n| n.clone());
             return Ok(value);
         } else {
-            let succ = self.successor.lock().await.clone();
+            let succ = { self.successor.lock().await.clone() };
             let addr = succ.find_successor(id).await?;
             let client = Client::new();
 
@@ -118,7 +118,6 @@ where
                 .parse()
                 .unwrap();
 
-            // TODO error handling
             let res = client.get(url).await.unwrap();
             match res.status() {
                 http::StatusCode::NOT_FOUND => Ok(None),
@@ -136,7 +135,6 @@ where
     pub async fn handle_message(&self, msg: Message) -> Result<Option<Message>, MessageError> {
         match msg {
             Message::Lookup(id) => {
-                // TODO failes
                 let responsible_node = self.find_successor(id).await?;
                 Ok(Some(Message::LookupResult(responsible_node)))
             }
@@ -145,8 +143,8 @@ where
                 Ok(None)
             }
             Message::GetPredecessor => {
-                let pred = self.predecessor.lock().await;
-                let response = Message::PredecessorResponse(*pred);
+                let pred = self.predecessor.lock().await.clone();
+                let response = Message::PredecessorResponse(pred);
                 Ok(Some(response))
             }
             Message::LeaveSuccessor(new_succecessor) => {
@@ -174,27 +172,36 @@ where
             return Ok(());
         }
         let neighbor = Neighbor::new(entry_node, entry_node);
-        let mut pred = self.predecessor.lock().await;
-        *pred = None;
-        // TODO can fail if entry_node == self
-        let new_succ = neighbor.find_successor(self.id).await?;
-        let mut succ = self.successor.lock().await;
-        *succ = new_succ;
+        {
+            let mut pred = self.predecessor.lock().await;
+            *pred = None;
+        }
+        {
+            let new_succ = neighbor.find_successor(self.id).await?;
+            let mut succ = self.successor.lock().await;
+            *succ = new_succ;
+        }
         Ok(())
     }
 
     pub async fn leave(&self) -> Result<(), MessageError> {
-        let pred = self.predecessor.lock().await;
-        let succ = self.successor.lock().await;
-        if let Some(p) = pred.as_ref() {
-            p.leave_successor(succ.clone()).await?;
-            succ.leave_predecessor(p.clone()).await?;
-        }
-
         let mut pred = self.predecessor.lock().await;
+        let mut succ = self.successor.lock().await;
+        // to this in two steps to avoid deadlock
+        if let Some(p) = pred.clone() {
+            // we cannot await those communications
+            // since this leads to a deadlock if two neighboring nodes
+            // leave at the same time
+            // TODO maybe await somehow to allow for safe leave
+            #[allow(unused_must_use)]
+            {
+                p.leave_successor(succ.clone());
+                succ.leave_predecessor(p);
+            }
+        }
         *pred = None;
-        let mut succ = self.predecessor.lock().await;
-        *succ = Some(Neighbor::new(self.address, self.web_address));
+        *succ = Neighbor::new(self.address, self.web_address);
+
         Ok(())
     }
 
@@ -231,7 +238,7 @@ where
         let mut successor = self.successor.lock().await;
 
         let predecessor = if self.id == successor.id {
-            *self.predecessor.lock().await
+            self.predecessor.lock().await.clone()
         } else {
             successor.get_predecessor().await?
         };
@@ -251,7 +258,7 @@ where
     }
 
     pub async fn neighbors(&self) -> Vec<SocketAddr> {
-        let succ = self.successor.lock().await;
+        let succ = self.successor.lock().await.clone();
         vec![succ.web_addr]
     }
 
@@ -272,7 +279,6 @@ where
                 .method(http::Method::PUT)
                 .body(payload)
                 .unwrap();
-            // TODO error handling
             let res = client.request(req).await.unwrap();
             return match res.status() {
                 http::StatusCode::OK => Ok(()),
