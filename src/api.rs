@@ -179,13 +179,10 @@ pub async fn serve(addr: SocketAddr, node: Arc<ChordNode>) {
     let join_chord_node = node.clone();
     let join = warp::path!("join")
         .and(warp::query())
-        .and(warp::get())
         .and_then(move |req: JoinRequest| join(join_chord_node.clone(), req));
 
     let leave_chord_node = node.clone();
-    let leave = warp::path!("leave")
-        .and(warp::get())
-        .and_then(move || leave(leave_chord_node.clone()));
+    let leave = warp::path!("leave").and_then(move || leave(leave_chord_node.clone()));
 
     warp::serve(get.or(put).or(info).or(join).or(leave))
         .bind(addr)

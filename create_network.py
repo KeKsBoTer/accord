@@ -1,20 +1,15 @@
-from os import umask
 import subprocess
-from typing import List
+from typing import Dict, List
 import requests
 import time
 import random
+import argparse
 from multiprocessing.pool import ThreadPool
 
-entry_node = 9000
-ws_port = 8000
-
-processes = []
-
-num_nodes = 50
-num_leaves = (2*num_nodes)//3
-
-stabilization_period = 500
+# Logger
+import logging
+logging.basicConfig(format="%(levelname)s: %(message)s")
+logger = logging.getLogger()
 
 
 def check_stable(nodes: List[int], debug: bool):
@@ -24,87 +19,134 @@ def check_stable(nodes: List[int], debug: bool):
         resp = requests.get(f'http://{node}/node-info')
         return (node, resp.json()["successor"])
 
-    if debug:
-        print("DEBUG: get successors...")
+    logger.debug("get successors...")
     edges = p.map(get_successor, [
-        f"127.0.0.1:{ws_port+i}" for i in nodes])
+        f"127.0.0.1:{args.ws_port+i}" for i in nodes])
     # print(edges)
 
     successors = [succ for (node, succ) in edges if node != succ]
 
-    if debug:
-        print(f"DEBUG: stabilization status: {len(successors)}/{len(nodes)}")
+    logger.debug("stabilization status: {len(successors)}/{len(nodes)}")
 
+    p.close()
     # check if each node has a unique successor
     return len(set(successors)) == len(nodes)
 
 
-print(f"INFO: spawning {num_nodes} nodes")
+def create_network(args) -> List[subprocess.Popen]:
 
-for i in range(num_nodes):
-    p = subprocess.Popen(["./target/debug/accord",
-                          f"127.0.0.1:{entry_node+i}",
-                          f"127.0.0.1:{ws_port+i}",
-                          "--stabilization-period", "500"], stdout=subprocess.PIPE)
-    processes.append(p)
+    logger.info(f"spawning {args.num_nodes} nodes")
 
-# wait one second to make sure all nodes have been created
-time.sleep(1)
+    processes = []
 
-p = ThreadPool(num_nodes)
+    kwargs = {}
+    if args.log_level != "DEBUG":
+        kwargs["stdout"] = subprocess.PIPE
 
+    for i in range(args.num_nodes):
+        p = subprocess.Popen(["./target/debug/accord",
+                              f"127.0.0.1:{args.chord_port+i}",
+                              f"127.0.0.1:{args.ws_port+i}",
+                              "--stabilization-period", "500"], **kwargs)
+        processes.append(p)
 
-def join(i):
-    return requests.get(
-        f'http://127.0.0.1:{ws_port+i}/join?nprime=127.0.0.1:{ws_port}')
-
-
-print(f"INFO: start joining...")
-start = time.time()
-p.map(join, range(num_nodes))
-
-print(f"INFO: waiting for stabilization...")
-
-while not check_stable(list(range(num_nodes)), False):
+    # wait one second to make sure all nodes have been created
     time.sleep(1)
 
-end = time.time()
-print(f"INFO: stabilization took {end-start:.3f} seconds")
+    p = ThreadPool(args.num_nodes)
+
+    def join(i):
+        return requests.get(
+            f'http://127.0.0.1:{args.ws_port+i}/join?nprime=127.0.0.1:{args.ws_port}')
+
+    logger.info(f"start joining...")
+    start = time.time()
+    p.map(join, range(args.num_nodes))
+
+    logger.info(f"waiting for stabilization...")
+
+    while not check_stable(list(range(args.num_nodes)), False):
+        time.sleep(1)
+
+    end = time.time()
+    logger.info(f"stabilization took {end-start:.3f} seconds")
+
+    return processes
 
 
-print(f"INFO: {num_leaves} nodes are leaving the network")
+def test_leave(args: Dict):
 
-alive_nodes = list(range(num_nodes))
-leave_nodes = []
-# stupid way to get random subset of nodes
-for i in range(num_nodes-num_leaves):
-    i = alive_nodes[random.randrange(len(alive_nodes))]
-    leave_nodes.append(i)
-    alive_nodes.remove(i)
+    logger.info(f"{args.num_leaves} nodes are leaving the network")
 
-burst_leave = True
+    alive_nodes = list(range(args.num_nodes))
+    leave_nodes = []
+    # stupid way to get random subset of nodes
+    for i in range(args.num_nodes-args.num_leaves):
+        i = alive_nodes[random.randrange(len(alive_nodes))]
+        leave_nodes.append(i)
+        alive_nodes.remove(i)
+
+    burst_leave = True
+
+    def leave(i):
+        return requests.get(
+            f'http://127.0.0.1:{args.ws_port+i}/leave')
+
+    start = time.time()
+
+    # tell half of the nodes to leave the network
+    if burst_leave:
+        p.map(leave, leave_nodes)
+    else:
+        for i in leave_nodes:
+            leave(i)
+
+    while not check_stable(alive_nodes, True):
+        time.sleep(1)
+
+    end = time.time()
+    logger.info(f"restabilization took {end-start:.3f} seconds")
 
 
-def leave(i):
-    return requests.get(
-        f'http://127.0.0.1:{ws_port+i}/leave')
+def parse_args():
+    parser = argparse.ArgumentParser(
+        prog="network_creator", description="creates a chord network")
+
+    parser.add_argument("--chord-port-start", dest="chord_port", type=int,
+                        default=9000,
+                        help="smallest port for chord network")
+
+    parser.add_argument("--api-port-start", dest="ws_port", type=int,
+                        default=8000,
+                        help="smallest port for HTTP API")
+
+    parser.add_argument("--stabilization-period", dest="stabilization_period", type=int,
+                        default=1000,
+                        help="delay beteween stabilizatios")
+
+    parser.add_argument("--num-leaves", dest="num_leaves", type=int,
+                        default=0,
+                        help="number of nodes that leave the network after stabilization (test)")
+
+    parser.add_argument("--log-level", dest="log_level", type=str,
+                        default="INFO",
+                        help="number of nodes that leave the network after stabilization (test)")
+
+    parser.add_argument("num_nodes", type=int,
+                        help="number of nodes in the network")
+
+    return parser.parse_args()
 
 
-start = time.time()
+if __name__ == "__main__":
+    args = parse_args()
+    logger.setLevel("INFO")
 
-# tell half of the nodes to leave the network
-if burst_leave:
-    p.map(leave, leave_nodes)
-else:
-    for i in leave_nodes:
-        leave(i)
+    processes = create_network(args)
+    if(args.num_leaves > 0):
+        test_leave(args)
 
+    # wait until user kills process
 
-while not check_stable(alive_nodes, True):
-    time.sleep(1)
-
-end = time.time()
-print(f"INFO: restabilization took {end-start:.3f} seconds")
-
-for p in processes:
-    p.wait()
+    for p in processes:
+        p.wait()

@@ -5,7 +5,7 @@ import requests
 
 dot = graphviz.Digraph(comment='Chord Ring')
 
-queue = set([8002])
+queue = set([8000])
 visited = set()
 
 while len(queue) > 0:

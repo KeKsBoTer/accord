@@ -17,7 +17,7 @@ pub enum Message {
     PredecessorResponse(Option<Neighbor>),
 
     // message sent to successor when a node leaves
-    LeavePredecessor(Neighbor),
+    LeavePredecessor(Option<Neighbor>),
     // message sent to predecessor when a node leaves
     LeaveSuccessor(Neighbor),
 

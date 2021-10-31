@@ -1,10 +1,10 @@
 use num_bigint::BigUint;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::fmt::Display;
+use std::fmt::{Debug, Display, Formatter};
 use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6};
 use std::ops::{Add, Sub};
-#[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[derive(Clone, Copy, PartialEq, PartialOrd, Serialize, Deserialize)]
 pub struct Identifier(u64);
 
 impl Identifier {
@@ -73,6 +73,12 @@ impl Sub for Identifier {
         let (diff, _) = self.0.overflowing_sub(other.0);
 
         Identifier(diff)
+    }
+}
+
+impl Debug for Identifier {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        return f.write_fmt(format_args!("{:}", self.0 / 281474976710656));
     }
 }
 

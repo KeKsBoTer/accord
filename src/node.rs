@@ -50,7 +50,10 @@ impl Neighbor {
 
     // tell a node that its predecessor left the network
     // and the given node is his new predecessor
-    async fn leave_predecessor(&self, new_predecessor: Neighbor) -> Result<(), MessageError> {
+    async fn leave_predecessor(
+        &self,
+        new_predecessor: Option<Neighbor>,
+    ) -> Result<(), MessageError> {
         handle_message!(self.addr, Message::LeavePredecessor(new_predecessor))
     }
 
@@ -99,7 +102,7 @@ where
         self.predecessor
             .lock()
             .await
-            .map(|n| id.is_between(self.id, n.id))
+            .map(|n| id.is_between(n.id, self.id))
             .unwrap_or(true)
     }
 
@@ -151,14 +154,25 @@ where
                 // our successor left so we need to update it to the
                 // new given one
                 let mut successor = self.successor.lock().await;
-                *successor = new_succecessor;
+                // if given successor = self.successor, take self
+                *successor = if successor.id == new_succecessor.id {
+                    Neighbor::new(self.address, self.web_address)
+                } else {
+                    new_succecessor
+                };
                 Ok(None)
             }
             Message::LeavePredecessor(new_predecessor) => {
                 // our predecessor left so we need to update it to the
                 // new given one
                 let mut pred = self.predecessor.lock().await;
-                *pred = Some(new_predecessor);
+
+                *pred = if !new_predecessor.is_none() && new_predecessor == pred.clone() {
+                    Some(Neighbor::new(self.address, self.web_address))
+                } else {
+                    new_predecessor
+                };
+
                 Ok(None)
             }
             Message::Ping => Ok(Some(Message::Pong)),
@@ -187,18 +201,22 @@ where
     pub async fn leave(&self) -> Result<(), MessageError> {
         let mut pred = self.predecessor.lock().await;
         let mut succ = self.successor.lock().await;
-        // to this in two steps to avoid deadlock
+
+        // we cannot await those communications
+        // since this leads to a deadlock if two neighboring nodes
+        // leave at the same time
+        // TODO maybe await somehow to allow for safe leave
         if let Some(p) = pred.clone() {
-            // we cannot await those communications
-            // since this leads to a deadlock if two neighboring nodes
-            // leave at the same time
-            // TODO maybe await somehow to allow for safe leave
             #[allow(unused_must_use)]
             {
-                p.leave_successor(succ.clone());
-                succ.leave_predecessor(p);
+                p.leave_successor(succ.clone()).await;
             }
         }
+        #[allow(unused_must_use)]
+        {
+            succ.leave_predecessor(pred.clone()).await;
+        }
+
         *pred = None;
         *succ = Neighbor::new(self.address, self.web_address);
 
@@ -222,7 +240,7 @@ where
         let mut pred = self.predecessor.lock().await;
         match pred.as_mut() {
             Some(predecessor) => {
-                if other.id.is_between(predecessor.id, self.id) {
+                if other.id.is_between(predecessor.id, self.id) && predecessor.id != other.id {
                     println!("[{:}] updated predecessor to {:}", self, other.addr);
                     *predecessor = other
                 }
@@ -243,7 +261,7 @@ where
             successor.get_predecessor().await?
         };
         if let Some(x) = predecessor {
-            if x.id.is_between(self.id, successor.id) {
+            if x.id.is_between(self.id, successor.id) && successor.id != x.id {
                 println!("[{:}] updated successor to {:}", self, x.addr);
                 *successor = x;
             }
