@@ -36,17 +36,26 @@ pub async fn put(
     node: Arc<ChordNode>,
     key: String,
     value: Bytes,
-) -> Result<String, warp::Rejection> {
+) -> Result<Response<String>, warp::Rejection> {
     let body = std::str::from_utf8(&value).unwrap();
-    let ok = node.put(key, body.to_string()).await;
 
-    match ok {
-        Ok(_) => Ok("ok".to_string()),
-        Err(e) => {
-            eprintln!("{:?}", e);
-            Err(warp::reject::reject())
+    let (status, msg) = match node.put(key.clone(), body.to_string()).await {
+        Ok(_) => (warp::http::StatusCode::OK, "ok"),
+        Err(err) => {
+            eprintln!(
+                "[{:}] error performing put (key={:}, value={:?}): {:?}",
+                node.address, key, value, err
+            );
+            (
+                warp::http::StatusCode::INTERNAL_SERVER_ERROR,
+                "error occured while performing puts operation",
+            )
         }
-    }
+    };
+    Ok(Response::builder()
+        .status(status)
+        .body(msg.to_string())
+        .unwrap())
 }
 
 #[derive(Serialize, Deserialize)]
