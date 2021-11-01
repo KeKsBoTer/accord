@@ -26,10 +26,6 @@ pub enum Message {
 
     Notify(Neighbor),
 
-    SimulateCrash,
-    CrashResponse,
-    SimRecover,
-
     Ping,
     Pong,
 }
