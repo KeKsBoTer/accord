@@ -92,7 +92,8 @@ def create_network(args, ips, ports) -> List[subprocess.Popen]:
 
     end = time.time()
     logger.info(f"stabilization took {end-start:.3f} seconds")
-
+    print(f"entrypoint - {ips[0]}:{ports[0]+1}")
+    print(f"entrypoint - {ips[1]}:{ports[1]+1}")
     print("list of processes completed")
     return processes
 
