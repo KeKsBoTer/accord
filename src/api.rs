@@ -18,7 +18,9 @@ pub async fn get(node: Arc<ChordNode>, key: String) -> Result<Response<String>, 
         Ok(value) => {
             let b = Response::builder();
             let resp = if let Some(v) = value {
-                b.status(warp::http::StatusCode::OK).body(v)
+                b.status(warp::http::StatusCode::OK)
+                    .header("content-type", "text/plain")
+                    .body(v)
             } else {
                 b.status(warp::http::StatusCode::NOT_FOUND)
                     .body("".to_string())
@@ -74,9 +76,12 @@ pub async fn info(node: Arc<ChordNode>) -> Result<Json, warp::Rejection> {
         others: Vec::with_capacity(1),
         chord_address: node.address,
     };
-    let pred = { node.predecessor.lock().await.clone() };
-    if pred.is_some() {
-        resp.others.push(pred.unwrap().web_addr);
+
+    if let Some(p) = node.predecessor.lock().await.clone() {
+        resp.others.push(p.web_addr);
+    }
+    if let Some(s) = node.second_successor.lock().await.clone() {
+        resp.others.push(s.web_addr);
     }
 
     return Ok(warp::reply::json(&resp));

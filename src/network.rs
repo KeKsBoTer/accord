@@ -16,6 +16,9 @@ pub enum Message {
     GetPredecessor,
     PredecessorResponse(Option<Neighbor>),
 
+    GetSuccessor,
+    SuccessorResponse(Neighbor),
+
     // message sent to successor when a node leaves
     LeavePredecessor(Option<Neighbor>),
     // message sent to predecessor when a node leaves
@@ -31,6 +34,7 @@ pub enum MessageError {
     IOError(std::io::Error),
     SerdeError(serde_cbor::Error),
     UnexpectedResponse(Message, Option<Message>),
+    AllSuccessorsDead(SocketAddr),
     HTTPStatusError(http::StatusCode),
 }
 

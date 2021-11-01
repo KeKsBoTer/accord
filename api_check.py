@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 
-import sys
 import argparse
 import json
 import random
-import threading
 import string
+import sys
+import threading
 import time
 import unittest
 import uuid
@@ -82,7 +82,7 @@ def do_request(host_port, method, url, body=None, accept_statuses=[200]):
 
     conn = None
     try:
-        conn = httplib.HTTPConnection(host_port)
+        conn = httplib.HTTPConnection(host_port, timeout=10)
         try:
             conn.request(method, url, body)
             r = conn.getresponse()
@@ -114,7 +114,11 @@ def do_request(host_port, method, url, body=None, accept_statuses=[200]):
                             + " --- Body start: "
                             + body[:30])
 
-    if content_type == "text/plain" and sys.version_info[0] >= 3:
+    # Note: This decodes all strings as UTF-8, regardless of charset specified in header
+    # TODO: Decode with specified charset
+    if isinstance(content_type, str) \
+            and content_type.startswith("text/plain") \
+            and sys.version_info[0] >= 3:
         body = body.decode()
 
     r2 = Response()
@@ -145,7 +149,7 @@ class SimpleApiCheck(unittest.TestCase):
         r = do_request(self.node, "PUT", "/storage/"+key, value)
         r = do_request(self.node, "GET", "/storage/"+key)
 
-        self.assertEqual(r.body.decode("utf-8"), value)
+        self.assertEqual(r.body, value)
 
     def test_node_info_json(self):
         r = do_request(self.node, "GET", "/node-info")
@@ -264,4 +268,8 @@ if __name__ == "__main__":
     test_suite.addTests(test_loader.loadTestsFromTestCase(SimCrashApiCheck))
 
     test_runner = unittest.TextTestRunner(verbosity=2)
-    test_runner.run(test_suite)
+    test_result = test_runner.run(test_suite)
+    if test_result.wasSuccessful():
+        sys.exit(0)
+    else:
+        sys.exit(1)

@@ -43,6 +43,12 @@ impl Neighbor {
             Message::PredecessorResponse(neighbor) => neighbor
         })
     }
+    async fn get_succcessor(&self) -> Result<Neighbor, MessageError> {
+        let msg = Message::GetSuccessor;
+        handle_message!(self.addr, msg, {
+            Message::SuccessorResponse(neighbor) => neighbor
+        })
+    }
 
     async fn notify(&self, neighbor: Neighbor) -> Result<(), MessageError> {
         handle_message!(self.addr, Message::Notify(neighbor))
@@ -75,6 +81,7 @@ where
     pub web_address: SocketAddr,
     pub predecessor: Mutex<Option<Neighbor>>,
     pub successor: Mutex<Neighbor>,
+    pub second_successor: Mutex<Option<Neighbor>>,
 
     pub id: Identifier,
     store: Mutex<HashMap<Key, Value>>,
@@ -92,6 +99,7 @@ where
             web_address: web_addr,
             predecessor: Mutex::new(None),
             successor: Mutex::new(Neighbor::new(addr, web_addr)),
+            second_successor: Mutex::new(None),
 
             id: addr.hash_id(),
             store: Mutex::new(HashMap::<Key, Value>::new()),
@@ -113,7 +121,7 @@ where
             let value = self.store.lock().await.get(&key).map(|n| n.clone());
             return Ok(value);
         } else {
-            let succ = { self.successor.lock().await.clone() };
+            let succ = self.successor.lock().await.clone();
             let addr = succ.find_successor(id).await?;
             let client = Client::new();
 
@@ -150,16 +158,24 @@ where
                 let response = Message::PredecessorResponse(pred);
                 Ok(Some(response))
             }
+            Message::GetSuccessor => {
+                let succ = self.successor.lock().await.clone();
+                let response = Message::SuccessorResponse(succ);
+                Ok(Some(response))
+            }
             Message::LeaveSuccessor(new_succecessor) => {
                 // our successor left so we need to update it to the
                 // new given one
-                let mut successor = self.successor.lock().await;
+                let successor = self.successor.lock().await.clone();
+                let mut update_second = false;
                 // if given successor = self.successor, take self
-                *successor = if successor.id == new_succecessor.id {
+                let new_succ = if successor.id == new_succecessor.id {
                     Neighbor::new(self.address, self.web_address)
                 } else {
+                    update_second = true;
                     new_succecessor
                 };
+                self.update_successor(new_succ, update_second).await?;
                 Ok(None)
             }
             Message::LeavePredecessor(new_predecessor) => {
@@ -192,8 +208,7 @@ where
         }
         {
             let new_succ = neighbor.find_successor(self.id).await?;
-            let mut succ = self.successor.lock().await;
-            *succ = new_succ;
+            self.update_successor(new_succ, true).await?;
         }
         Ok(())
     }
@@ -209,16 +224,19 @@ where
         if let Some(p) = pred.clone() {
             #[allow(unused_must_use)]
             {
-                p.leave_successor(succ.clone()).await;
+                // TODO set to None if cannot connect
+                p.clone().leave_successor(succ.clone()).await;
             }
         }
         #[allow(unused_must_use)]
         {
-            succ.leave_predecessor(pred.clone()).await;
+            succ.clone().leave_predecessor(pred.clone()).await;
         }
 
         *pred = None;
         *succ = Neighbor::new(self.address, self.web_address);
+        let mut second = self.second_successor.lock().await;
+        *second = None;
 
         Ok(())
     }
@@ -231,7 +249,21 @@ where
             if succ.id == self.id {
                 Ok(Neighbor::new(self.address, self.web_address))
             } else {
-                succ.find_successor(id).await
+                let result = succ.find_successor(id).await;
+                if let Ok(r) = result {
+                    Ok(r)
+                } else {
+                    // If successor does not respond try second successor
+                    let mut succ = self.successor.lock().await;
+                    let mut second = self.second_successor.lock().await;
+                    if let Some(sec_succ) = second.clone() {
+                        *succ = sec_succ;
+                        *second = Some(succ.get_succcessor().await?);
+                        sec_succ.find_successor(id).await
+                    } else {
+                        Err(MessageError::AllSuccessorsDead(self.address))
+                    }
+                }
             }
         }
     }
@@ -253,17 +285,30 @@ where
     }
 
     pub async fn stabilize(&self) -> Result<(), MessageError> {
-        let mut successor = self.successor.lock().await;
+        let successor = self.successor.lock().await.clone();
 
-        let predecessor = if self.id == successor.id {
-            self.predecessor.lock().await.clone()
-        } else {
-            successor.get_predecessor().await?
-        };
+        let mut predecessor = self.predecessor.lock().await.clone();
+        if self.id != successor.id {
+            let result = successor.get_predecessor().await;
+            if let Ok(s) = result {
+                predecessor = s;
+            } else {
+                // If successor does not respond try second successor
+                let mut succ = self.successor.lock().await;
+                let mut second = self.second_successor.lock().await;
+                if let Some(sec_succ) = second.clone() {
+                    *succ = sec_succ;
+                    *second = Some(succ.get_succcessor().await?);
+                    predecessor = succ.get_predecessor().await?;
+                } else {
+                    return Err(MessageError::AllSuccessorsDead(self.address));
+                }
+            }
+        }
         if let Some(x) = predecessor {
             if x.id.is_between(self.id, successor.id) && successor.id != x.id {
                 println!("[{:}] updated successor to {:}", self, x.addr);
-                *successor = x;
+                self.update_successor(x, true).await?;
             }
         }
         // the node does not need to message itself
@@ -304,6 +349,24 @@ where
             };
         }
         self.store.lock().await.insert(key, value);
+        Ok(())
+    }
+
+    async fn update_successor(
+        &self,
+        new_succ: Neighbor,
+        update_second: bool,
+    ) -> Result<(), MessageError> {
+        let current = {
+            // do this to avoid locking successor for to long
+            let mut successor = self.successor.lock().await;
+            *successor = new_succ;
+            new_succ
+        };
+        if update_second {
+            let mut second = self.second_successor.lock().await;
+            *second = Some(current.get_succcessor().await?);
+        }
         Ok(())
     }
 }
