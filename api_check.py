@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 
-import sys
 import argparse
 import json
 import random
-import threading
 import string
+import sys
+import threading
 import time
 import unittest
 import uuid
@@ -16,6 +16,7 @@ logging.basicConfig()
 logger = logging.getLogger()
 
 # Python version check
+import sys
 
 if sys.version_info[0] <= 2:
     import httplib
@@ -35,34 +36,27 @@ settle_ms = SETTLE_MS_DEFAULT
 
 test_nodes = []
 
-
 def set_test_nodes(nodes):
     global test_nodes
     test_nodes = nodes
 
-
 def parse_args():
-    parser = argparse.ArgumentParser(
-        prog="api_check", description="node API checker")
+    parser = argparse.ArgumentParser(prog="api_check", description="node API checker")
 
     parser.add_argument("--settle-ms", type=int,
-                        default=SETTLE_MS_DEFAULT,
-                        help="After a join/leave call, wait for the network to settle (default {} ms)"
-                        .format(SETTLE_MS_DEFAULT))
+            default=SETTLE_MS_DEFAULT,
+            help="After a join/leave call, wait for the network to settle (default {} ms)"
+                .format(SETTLE_MS_DEFAULT))
 
     parser.add_argument("nodes", type=str, nargs="+",
-                        help="addresses (host:port) of nodes to test")
+            help="addresses (host:port) of nodes to test")
 
     return parser.parse_args()
-
 
 def describe_exception(e):
     return "%s: %s" % (type(e).__name__, e)
 
-
-class Response(object):
-    pass
-
+class Response(object): pass
 
 def search_header_tuple(headers, header_name):
     if sys.version_info[0] <= 2:
@@ -75,26 +69,24 @@ def search_header_tuple(headers, header_name):
             return value
     return None
 
-
 def do_request(host_port, method, url, body=None, accept_statuses=[200]):
     def describe_request():
         return "%s %s%s" % (method, host_port, url)
 
     conn = None
     try:
-        conn = httplib.HTTPConnection(host_port)
+        conn = httplib.HTTPConnection(host_port, timeout=10)
         try:
             conn.request(method, url, body)
             r = conn.getresponse()
         except Exception as e:
             raise Exception(describe_request()
-                            + " --- "
-                            + describe_exception(e))
+                    + " --- "
+                    + describe_exception(e))
 
         status = r.status
         if status not in accept_statuses:
-            raise Exception(describe_request() +
-                            " --- unexpected status %d" % (r.status))
+            raise Exception(describe_request() + " --- unexpected status %d" % (r.status))
 
         headers = r.getheaders()
         body = r.read()
@@ -109,12 +101,16 @@ def do_request(host_port, method, url, body=None, accept_statuses=[200]):
             body = json.loads(body)
         except Exception as e:
             raise Exception(describe_request()
-                            + " --- "
-                            + describe_exception(e)
-                            + " --- Body start: "
-                            + body[:30])
+                    + " --- "
+                    + describe_exception(e)
+                    + " --- Body start: "
+                    + body[:30])
 
-    if content_type == "text/plain" and sys.version_info[0] >= 3:
+    # Note: This decodes all strings as UTF-8, regardless of charset specified in header
+    # TODO: Decode with specified charset
+    if isinstance(content_type,str) \
+            and content_type.startswith("text/plain") \
+            and sys.version_info[0] >= 3:
         body = body.decode()
 
     r2 = Response()
@@ -123,7 +119,6 @@ def do_request(host_port, method, url, body=None, accept_statuses=[200]):
     r2.body = body
 
     return r2
-
 
 class SimpleApiCheck(unittest.TestCase):
 
@@ -135,8 +130,7 @@ class SimpleApiCheck(unittest.TestCase):
 
     def test_get_nonexistent_value_404(self):
         key = "api-test-key-nonexistent-key-{}".format(uuid.uuid4())
-        r = do_request(self.node, "GET", "/storage/" +
-                       key, accept_statuses=[404])
+        r = do_request(self.node, "GET", "/storage/"+key, accept_statuses=[404])
 
     def test_kv_put_and_get(self):
         key = "api-test-key-{}".format(uuid.uuid4())
@@ -145,14 +139,14 @@ class SimpleApiCheck(unittest.TestCase):
         r = do_request(self.node, "PUT", "/storage/"+key, value)
         r = do_request(self.node, "GET", "/storage/"+key)
 
-        self.assertEqual(r.body.decode("utf-8"), value)
+        self.assertEqual(r.body, value)
 
     def test_node_info_json(self):
         r = do_request(self.node, "GET", "/node-info")
 
         content_type = search_header_tuple(r.headers, "Content-Type")
         self.assertEqual(content_type, "application/json",
-                         "Headers should specify Content-Type: application/json")
+                    "Headers should specify Content-Type: application/json")
 
         self.assertIn("node_hash", r.body)
         self.assertIn("successor", r.body)
@@ -168,7 +162,6 @@ class SimpleApiCheck(unittest.TestCase):
 
         self.assertIsInstance(r.body["successor"], json_str_type)
         self.assertIsInstance(r.body["others"], list)
-
 
 class JoinLeaveApiCheck(unittest.TestCase):
 
@@ -196,7 +189,6 @@ class JoinLeaveApiCheck(unittest.TestCase):
         # In a two-node network, each should be their own successor
         # Here, we just check the first one, so that the dummy node can pass
         self.assertEqual(r.body["successor"], self.nodeB)
-
 
 class SimCrashApiCheck(unittest.TestCase):
 
@@ -229,13 +221,11 @@ class SimCrashApiCheck(unittest.TestCase):
         time.sleep(settle_ms / 1000.0)
 
         # Crashed node should not respond to requests
-        self.assertRaises(Exception, lambda: do_request(
-            self.nodeA, "POST", "/leave"))
+        self.assertRaises(Exception, lambda: do_request(self.nodeA, "POST", "/leave"))
         time.sleep(settle_ms / 1000.0)
 
         # Crashed node should not respond to node-info either
-        self.assertRaises(Exception, lambda: do_request(
-            self.nodeA, "GET", "/node-info"))
+        self.assertRaises(Exception, lambda: do_request(self.nodeA, "GET", "/node-info"))
 
         # --------------------------------------------------
         # Simulate recovery
@@ -247,7 +237,6 @@ class SimCrashApiCheck(unittest.TestCase):
         time.sleep(settle_ms / 1000.0)
 
         r = do_request(self.nodeA, "GET", "/node-info")
-
 
 if __name__ == "__main__":
 
@@ -264,4 +253,8 @@ if __name__ == "__main__":
     test_suite.addTests(test_loader.loadTestsFromTestCase(SimCrashApiCheck))
 
     test_runner = unittest.TextTestRunner(verbosity=2)
-    test_runner.run(test_suite)
+    test_result = test_runner.run(test_suite)
+    if test_result.wasSuccessful():
+        sys.exit(0)
+    else:
+        sys.exit(1)

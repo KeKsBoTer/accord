@@ -75,7 +75,7 @@ where
     pub web_address: SocketAddr,
     pub predecessor: Mutex<Option<Neighbor>>,
     pub successor: Mutex<Neighbor>,
-    pub sim_crash_state: bool,
+    pub sim_crash_state: Mutex<bool>,
 
     pub id: Identifier,
     store: Mutex<HashMap<Key, Value>>,
@@ -93,7 +93,7 @@ where
             web_address: web_addr,
             predecessor: Mutex::new(None),
             successor: Mutex::new(Neighbor::new(addr, web_addr)),
-            sim_crash_state:false,
+            sim_crash_state: Mutex::new(false),
 
             id: addr.hash_id(),
             store: Mutex::new(HashMap::<Key, Value>::new()),
@@ -138,10 +138,10 @@ where
     }
 
     pub async fn handle_message(& self, msg: Message) -> Result<Option<Message>, MessageError> {
-        if self.sim_crash_state==true {
+        if self.sim_crash_state == true {
             match msg {
 
-                Message::SimulateCrash => {
+                Message::SimRecover => {
                     self.change_sim_crash_state(false);
                     Ok(None)
                 }
@@ -331,7 +331,7 @@ where
         Ok(())
     }
     
-    pub async fn change_sim_crash_state(& mut self, state: bool) {
+    pub async fn change_sim_crash_state(&self, state: bool) {
         self.sim_crash_state = state;
     }
 }
