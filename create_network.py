@@ -13,7 +13,7 @@ logging.basicConfig(format="%(levelname)s: %(message)s")
 logger = logging.getLogger()
 
 
-def check_stable(nodes: List[int], debug: bool):
+def check_stable(nodes: List[int]):
     p = ThreadPool(len(nodes))
 
     def get_successor(node):
@@ -66,7 +66,7 @@ def create_network(args) -> List[subprocess.Popen]:
 
     logger.info(f"waiting for stabilization...")
 
-    while not check_stable(list(range(args.num_nodes)), False):
+    while not check_stable(list(range(args.num_nodes))):
         time.sleep(1)
 
     end = time.time()
@@ -103,7 +103,7 @@ def test_leave(args: Dict):
             for i in leave_nodes:
                 leave(i)
 
-    while not check_stable(alive_nodes, True):
+    while not check_stable(alive_nodes):
         time.sleep(1)
 
     end = time.time()

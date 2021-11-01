@@ -245,6 +245,8 @@ where
 
         *pred = None;
         *succ = Neighbor::new(self.address, self.web_address);
+        let mut second = self.second_successor.lock().await;
+        *second = None;
         Ok(())
     }
 
