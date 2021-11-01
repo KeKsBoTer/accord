@@ -22,6 +22,11 @@ pub enum Message {
     LeaveSuccessor(Neighbor),
 
     Notify(Neighbor),
+
+    SimulateCrash,
+    CrashResponse,
+    SimRecover,
+
     Ping,
     Pong,
 }

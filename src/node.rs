@@ -75,6 +75,7 @@ where
     pub web_address: SocketAddr,
     pub predecessor: Mutex<Option<Neighbor>>,
     pub successor: Mutex<Neighbor>,
+    pub sim_crash_state: bool,
 
     pub id: Identifier,
     store: Mutex<HashMap<Key, Value>>,
@@ -92,6 +93,7 @@ where
             web_address: web_addr,
             predecessor: Mutex::new(None),
             successor: Mutex::new(Neighbor::new(addr, web_addr)),
+            sim_crash_state:false,
 
             id: addr.hash_id(),
             store: Mutex::new(HashMap::<Key, Value>::new()),
@@ -136,6 +138,18 @@ where
     }
 
     pub async fn handle_message(&self, msg: Message) -> Result<Option<Message>, MessageError> {
+        if self.sim_crash_state==true{
+            match msg{
+
+                Message::SimRecover => {
+                    self.sim_crash_state = false;
+                    Ok(None)
+                }
+            // 500
+                _ => Ok(Message::CrashResponse)
+
+            }
+        }
         match msg {
             Message::Lookup(id) => {
                 let responsible_node = self.find_successor(id).await?;
@@ -175,8 +189,16 @@ where
 
                 Ok(None)
             }
+             Message::SimulateCrash => {
+                // crash state -> 500 to all requests but sim-recover
+                
+                // set self.somevariable = true and change states 
+                self.sim_crash_state = true;
+
+                Ok(None)
+            }
             Message::Ping => Ok(Some(Message::Pong)),
-            _ => panic!("this should not happen (incomming message: {:?})", msg),
+            _ => panic!("this should not happen (incoming message: {:?})", msg),
         }
     }
 
