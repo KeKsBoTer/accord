@@ -146,7 +146,7 @@ where
                     Ok(None)
                 }
             // 500
-                _ => Ok(Some(Message::CrashResponse))
+                _ => Ok(Some(MessageError::HTTPStatusError(INTERNAL_SERVER_ERROR)))
 
             }
         }
@@ -194,10 +194,10 @@ where
                 // crash state -> 500 to all requests but sim-recover
                 
                 // set self.somevariable = true and change states 
-                self.change_sim_crash_state(true);
-
+               // self.change_sim_crash_state(true);
                 Ok(None)
             }
+
             Message::Ping => Ok(Some(Message::Pong)),
             _ => panic!("this should not happen (incoming message: {:?})", msg),
         }
@@ -332,7 +332,8 @@ where
     }
     
     pub async fn change_sim_crash_state(&self, state: bool) {
-        self.sim_crash_state = state;
+        let mut new_state = state.lock().await;
+        self.sim_crash_state = state.lock().await;
     }
 }
 
