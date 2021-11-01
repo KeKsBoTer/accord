@@ -82,6 +82,7 @@ where
     pub predecessor: Mutex<Option<Neighbor>>,
     pub successor: Mutex<Neighbor>,
     pub second_successor: Mutex<Option<Neighbor>>,
+    pub sim_crash_state: Mutex<bool>,
 
     pub id: Identifier,
     store: Mutex<HashMap<Key, Value>>,
@@ -100,6 +101,7 @@ where
             predecessor: Mutex::new(None),
             successor: Mutex::new(Neighbor::new(addr, web_addr)),
             second_successor: Mutex::new(None),
+            sim_crash_state: Mutex::new(false),
 
             id: addr.hash_id(),
             store: Mutex::new(HashMap::<Key, Value>::new()),
@@ -144,55 +146,70 @@ where
     }
 
     pub async fn handle_message(&self, msg: Message) -> Result<Option<Message>, MessageError> {
-        match msg {
-            Message::Lookup(id) => {
-                let responsible_node = self.find_successor(id).await?;
-                Ok(Some(Message::LookupResult(responsible_node)))
-            }
-            Message::Notify(addr) => {
-                self.notify(addr.into()).await;
-                Ok(None)
-            }
-            Message::GetPredecessor => {
-                let pred = self.predecessor.lock().await.clone();
-                let response = Message::PredecessorResponse(pred);
-                Ok(Some(response))
-            }
-            Message::GetSuccessor => {
-                let succ = self.successor.lock().await.clone();
-                let response = Message::SuccessorResponse(succ);
-                Ok(Some(response))
-            }
-            Message::LeaveSuccessor(new_succecessor) => {
-                // our successor left so we need to update it to the
-                // new given one
-                let successor = self.successor.lock().await.clone();
-                let mut update_second = false;
-                // if given successor = self.successor, take self
-                let new_succ = if successor.id == new_succecessor.id {
-                    Neighbor::new(self.address, self.web_address)
-                } else {
-                    update_second = true;
-                    new_succecessor
-                };
-                self.update_successor(new_succ, update_second).await?;
-                Ok(None)
-            }
-            Message::LeavePredecessor(new_predecessor) => {
-                // our predecessor left so we need to update it to the
-                // new given one
-                let mut pred = self.predecessor.lock().await;
+        let scs = self.sim_crash_state.lock().await.clone();
+        if scs == true {
+            Err(MessageError::HTTPStatusError(
+                http::StatusCode::INTERNAL_SERVER_ERROR,
+            ))
+        } else {
+            match msg {
+                Message::Lookup(id) => {
+                    let responsible_node = self.find_successor(id).await?;
+                    Ok(Some(Message::LookupResult(responsible_node)))
+                }
+                Message::Notify(addr) => {
+                    self.notify(addr.into()).await;
+                    Ok(None)
+                }
+                Message::GetPredecessor => {
+                    let pred = self.predecessor.lock().await.clone();
+                    let response = Message::PredecessorResponse(pred);
+                    Ok(Some(response))
+                }
+                Message::GetSuccessor => {
+                    let succ = self.successor.lock().await.clone();
+                    let response = Message::SuccessorResponse(succ);
+                    Ok(Some(response))
+                }
+                Message::LeaveSuccessor(new_succecessor) => {
+                    // our successor left so we need to update it to the
+                    // new given one
+                    let successor = self.successor.lock().await.clone();
+                    let mut update_second = false;
+                    // if given successor = self.successor, take self
+                    let new_succ = if successor.id == new_succecessor.id {
+                        Neighbor::new(self.address, self.web_address)
+                    } else {
+                        update_second = true;
+                        new_succecessor
+                    };
+                    self.update_successor(new_succ, update_second).await?;
+                    Ok(None)
+                }
+                Message::LeavePredecessor(new_predecessor) => {
+                    // our predecessor left so we need to update it to the
+                    // new given one
+                    let mut pred = self.predecessor.lock().await;
 
-                *pred = if !new_predecessor.is_none() && new_predecessor == pred.clone() {
-                    Some(Neighbor::new(self.address, self.web_address))
-                } else {
-                    new_predecessor
-                };
+                    *pred = if !new_predecessor.is_none() && new_predecessor == pred.clone() {
+                        Some(Neighbor::new(self.address, self.web_address))
+                    } else {
+                        new_predecessor
+                    };
 
-                Ok(None)
+                    Ok(None)
+                }
+                Message::SimulateCrash => {
+                    // crash state -> 500 to all requests but sim-recover
+
+                    // set self.somevariable = true and change states
+                    // self.change_sim_crash_state(true);
+                    Ok(None)
+                }
+
+                Message::Ping => Ok(Some(Message::Pong)),
+                _ => panic!("this should not happen (incoming message: {:?})", msg),
             }
-            Message::Ping => Ok(Some(Message::Pong)),
-            _ => panic!("this should not happen (incomming message: {:?})", msg),
         }
     }
 
@@ -367,6 +384,17 @@ where
             let mut second = self.second_successor.lock().await;
             *second = Some(current.get_succcessor().await?);
         }
+        Ok(())
+    }
+    pub async fn sim_crash(&self) -> Result<(), MessageError> {
+        let mut scs = self.sim_crash_state.lock().await;
+        *scs = true;
+        Ok(())
+    }
+
+    pub async fn sim_recover(&self) -> Result<(), MessageError> {
+        let mut scs = self.sim_crash_state.lock().await;
+        *scs = false;
         Ok(())
     }
 }

@@ -272,4 +272,8 @@ if __name__ == "__main__":
     if test_result.wasSuccessful():
         sys.exit(0)
     else:
-        sys.exit(1)
+<< << << < HEAD
+sys.exit(1)
+== == == =
+sys.exit(1)
+>>>>>> > 1d216a7b05c4e03cc582f36be41244d476883e9d
