@@ -1,7 +1,7 @@
 import subprocess
 import json
 from tqdm import tqdm
-nodes = [2, 4, 8, 16, 25, 32, 50, 64, 96, 100]
+nodes = [2, 4, 8, 16, 25, 32, 50, 64]
 
 results = []
 

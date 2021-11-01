@@ -225,23 +225,25 @@ where
     }
 
     pub async fn leave(&self) -> Result<(), MessageError> {
-        let mut pred = self.predecessor.lock().await;
-        let mut succ = self.successor.lock().await;
+        let p = self.predecessor.lock().await.clone();
+        let s = self.successor.lock().await.clone();
 
         // we cannot await those communications
         // since this leads to a deadlock if two neighboring nodes
         // leave at the same time
         // TODO maybe await somehow to allow for safe leave
-        if let Some(p) = pred.clone() {
+        if let Some(p2) = p {
             #[allow(unused_must_use)]
             {
-                p.leave_successor(succ.clone());
+                p2.leave_successor(s).await;
             }
         }
         #[allow(unused_must_use)]
         {
-            succ.clone().leave_predecessor(pred.clone());
+            s.leave_predecessor(p).await;
         }
+        let mut pred = self.predecessor.lock().await;
+        let mut succ = self.successor.lock().await;
 
         *pred = None;
         *succ = Neighbor::new(self.address, self.web_address);
