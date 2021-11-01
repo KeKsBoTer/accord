@@ -138,18 +138,10 @@ where
     }
 
     pub async fn handle_message(& self, msg: Message) -> Result<Option<Message>, MessageError> {
-        if self.sim_crash_state == true {
-            match msg {
-
-                Message::SimRecover => {
-                    self.change_sim_crash_state(false);
-                    Ok(None)
-                }
-            // 500
-                _ => Ok(Some(MessageError::HTTPStatusError(INTERNAL_SERVER_ERROR)))
-
+        let mut scs = self.sim_crash_state.lock().await;
+        if *scs == true {
+                Err((Some(MessageError::HTTPStatusError(INTERNAL_SERVER_ERROR))))
             }
-        }
         else {
             match msg {
             Message::Lookup(id) => {
@@ -331,10 +323,6 @@ where
         Ok(())
     }
     
-    pub async fn change_sim_crash_state(&self, state: bool) {
-        let mut new_state = state.lock().await;
-        self.sim_crash_state = state.lock().await;
-    }
 }
 
 impl<Key, Value> Display for Node<Key, Value>
