@@ -4,6 +4,7 @@ import requests
 import time
 import random
 import argparse
+import sys
 from multiprocessing.pool import ThreadPool
 
 # Logger
@@ -94,12 +95,13 @@ def test_leave(args: Dict):
 
     start = time.time()
 
-    # tell half of the nodes to leave the network
-    if burst_leave:
-        p.map(leave, leave_nodes)
-    else:
-        for i in leave_nodes:
-            leave(i)
+    with ThreadPool(args.num_nodes) as p:
+        # tell half of the nodes to leave the network
+        if burst_leave:
+            p.map(leave, leave_nodes)
+        else:
+            for i in leave_nodes:
+                leave(i)
 
     while not check_stable(alive_nodes, True):
         time.sleep(1)
@@ -130,7 +132,10 @@ def parse_args():
 
     parser.add_argument("--log-level", dest="log_level", type=str,
                         default="INFO",
-                        help="number of nodes that leave the network after stabilization (test)")
+                        help="log level (DEBUG prints chord binary output)")
+
+    parser.add_argument("--quit-after-stabilization",  dest='quit_after_stab', action='store_true',
+                        help="quit program after initial stabilization")
 
     parser.add_argument("num_nodes", type=int,
                         help="number of nodes in the network")
@@ -143,6 +148,12 @@ if __name__ == "__main__":
     logger.setLevel("INFO")
 
     processes = create_network(args)
+
+    if args.quit_after_stab:
+        for p in processes:
+            p.kill()
+        sys.exit(0)
+
     if(args.num_leaves > 0):
         test_leave(args)
 

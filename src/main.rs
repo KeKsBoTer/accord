@@ -43,6 +43,10 @@ async fn main() {
     let listener = TcpListener::bind(opt.address).await.unwrap();
     let chord_server = async {
         loop {
+            if chord_node.is_crashed().await {
+                listener.accept().await.unwrap();
+                continue;
+            }
             let (mut tcp_stream, _) = listener.accept().await.unwrap();
 
             let tcp_chord_node = chord_node.clone();
@@ -51,21 +55,43 @@ async fn main() {
                 tcp_stream.read_to_end(&mut send_buf).await.unwrap();
                 let msg: Message = serde_cbor::from_slice(send_buf.as_slice()).unwrap();
 
-                if let Some(resp) = tcp_chord_node.handle_message(msg).await.unwrap() {
-                    let buf = serde_cbor::to_vec(&resp).unwrap();
-                    tcp_stream.write_all(&buf).await.unwrap();
-                    tcp_stream.shutdown().await.unwrap();
+                match tcp_chord_node.handle_message(msg).await {
+                    Ok(response) => {
+                        if let Some(resp) = response {
+                            let buf = serde_cbor::to_vec(&resp).unwrap();
+                            tcp_stream.write_all(&buf).await.unwrap();
+                            tcp_stream.shutdown().await.unwrap();
+                        }
+                    }
+                    Err(err) => {
+                        eprintln!(
+                            "[{:}] error handling message {:?}: {:?}",
+                            tcp_chord_node.address, msg, err
+                        );
+                    }
                 }
             });
         }
     };
 
-    let stabilize_node = chord_node.clone();
+    let periodic_node = chord_node.clone();
     let stabilizer_task = async {
         loop {
             sleep(Duration::from_millis(opt.stabilization_period)).await;
-            if let Err(err) = stabilize_node.stabilize().await {
-                println!("error: {:?}", err);
+            if !periodic_node.is_crashed().await {
+                let stabilization_node = periodic_node.clone();
+                tokio::spawn(async move {
+                    if let Err(err) = stabilization_node.stabilize().await {
+                        println!(
+                            "[{:}] error while stabilizing: {:?}",
+                            stabilization_node.address, err
+                        );
+                    }
+                });
+                let check_node = periodic_node.clone();
+                tokio::spawn(async move {
+                    check_node.check_successors().await;
+                });
             }
         }
     };

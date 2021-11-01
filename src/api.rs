@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use warp::http::Response;
 use warp::hyper::body::to_bytes;
 use warp::hyper::{Client, Uri};
-use warp::reply::{Json};
+use warp::reply::Json;
 use warp::Filter;
 
 use crate::node::Node;
@@ -14,6 +14,14 @@ use crate::node::Node;
 pub type ChordNode = Node<String, String>;
 
 pub async fn get(node: Arc<ChordNode>, key: String) -> Result<Response<String>, warp::Rejection> {
+    let b = Response::builder();
+    if node.is_crashed().await {
+        return Ok(b
+            .status(warp::http::StatusCode::INTERNAL_SERVER_ERROR)
+            .body("oh no I crashed :(".to_string())
+            .unwrap());
+    }
+
     match node.lookup(key).await {
         Ok(value) => {
             let b = Response::builder();
@@ -39,6 +47,13 @@ pub async fn put(
     key: String,
     value: Bytes,
 ) -> Result<Response<String>, warp::Rejection> {
+    let b = Response::builder();
+    if node.is_crashed().await {
+        return Ok(b
+            .status(warp::http::StatusCode::INTERNAL_SERVER_ERROR)
+            .body("oh no I crashed :(".to_string())
+            .unwrap());
+    }
     let body = std::str::from_utf8(&value).unwrap();
 
     let (status, msg) = match node.put(key.clone(), body.to_string()).await {
@@ -69,6 +84,9 @@ struct InfoReponse {
 }
 
 pub async fn info(node: Arc<ChordNode>) -> Result<Json, warp::Rejection> {
+    if node.is_crashed().await {
+        panic!("tried to call info for crashed node");
+    }
     let succ = { node.successor.lock().await.clone() };
     let mut resp = InfoReponse {
         node_hash: format!("{:x}", u64::from(node.id)),
@@ -97,14 +115,19 @@ pub async fn join(
     node: Arc<ChordNode>,
     req: JoinRequest,
 ) -> Result<Response<String>, warp::Rejection> {
+    let b = Response::builder();
+    if node.is_crashed().await {
+        return Ok(b
+            .status(warp::http::StatusCode::INTERNAL_SERVER_ERROR)
+            .body("oh no I crashed :(".to_string())
+            .unwrap());
+    }
     let client = Client::new();
 
     let url: Uri = format!("http://{:}/node-info", req.nprime).parse().unwrap();
 
     let ok: bool;
     let mut err_str: String = "".to_string();
-
-    let b = Response::builder();
 
     // TODO fix this ugly code
     match client.get(url).await {
@@ -148,6 +171,13 @@ pub async fn join(
 
 pub async fn leave(node: Arc<ChordNode>) -> Result<Response<String>, warp::Rejection> {
     let b = Response::builder();
+    if node.is_crashed().await {
+        return Ok(b
+            .status(warp::http::StatusCode::INTERNAL_SERVER_ERROR)
+            .body("oh no I crashed :(".to_string())
+            .unwrap());
+    }
+
     if let Err(err) = node.leave().await {
         eprintln!("[{:}] cannot leave network: {:?}", node.address, err);
         Ok(b.status(warp::http::StatusCode::INTERNAL_SERVER_ERROR)
@@ -163,8 +193,17 @@ pub async fn leave(node: Arc<ChordNode>) -> Result<Response<String>, warp::Rejec
 
 pub async fn sim_crash(node: Arc<ChordNode>) -> Result<Response<String>, warp::Rejection> {
     let b = Response::builder();
+    if node.is_crashed().await {
+        return Ok(b
+            .status(warp::http::StatusCode::INTERNAL_SERVER_ERROR)
+            .body("oh no I crashed :(".to_string())
+            .unwrap());
+    }
     if let Err(err) = node.sim_crash().await {
-        eprintln!("[{:}] error while simulating crash: {:?}", node.address, err);
+        eprintln!(
+            "[{:}] error while simulating crash: {:?}",
+            node.address, err
+        );
         Ok(b.status(warp::http::StatusCode::INTERNAL_SERVER_ERROR)
             .body("error while sim-crash".to_string())
             .unwrap())
@@ -178,12 +217,18 @@ pub async fn sim_crash(node: Arc<ChordNode>) -> Result<Response<String>, warp::R
 pub async fn sim_recover(node: Arc<ChordNode>) -> Result<Response<String>, warp::Rejection> {
     let b = Response::builder();
     if let Err(err) = node.sim_recover().await {
-        eprintln!("[{:}] error while simulating crash: {:?}", node.address, err);
+        eprintln!(
+            "[{:}] error while simulating crash: {:?}",
+            node.address, err
+        );
         Ok(b.status(warp::http::StatusCode::INTERNAL_SERVER_ERROR)
             .body("error while sim-recovering".to_string())
             .unwrap())
     } else {
-        println!("[{:}] can now try to reconnect to chord network", node.address);
+        println!(
+            "[{:}] can now try to reconnect to chord network",
+            node.address
+        );
         Ok(b.status(warp::http::StatusCode::OK)
             .body("ok".to_string())
             .unwrap())
@@ -219,16 +264,20 @@ pub async fn serve(addr: SocketAddr, node: Arc<ChordNode>) {
     let leave = warp::path!("leave").and_then(move || leave(leave_chord_node.clone()));
 
     let sim_crash_node = node.clone();
-    let sim_crash = warp::path!("sim-crash")
-        .and_then(move || sim_crash(sim_crash_node.clone()));
-    
+    let sim_crash = warp::path!("sim-crash").and_then(move || sim_crash(sim_crash_node.clone()));
+
     let sim_recover_node = node.clone();
-    let sim_recover = warp::path!("sim-recover")
-        .and_then(move || sim_recover(sim_recover_node.clone()));
+    let sim_recover =
+        warp::path!("sim-recover").and_then(move || sim_recover(sim_recover_node.clone()));
 
-
-
-    warp::serve(get.or(put).or(info).or(join).or(leave).or(sim_crash).or(sim_recover))
-        .bind(addr)
-        .await;
+    warp::serve(
+        get.or(put)
+            .or(info)
+            .or(join)
+            .or(leave)
+            .or(sim_crash)
+            .or(sim_recover),
+    )
+    .bind(addr)
+    .await;
 }
