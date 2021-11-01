@@ -137,20 +137,21 @@ where
         }
     }
 
-    pub async fn handle_message(&self, msg: Message) -> Result<Option<Message>, MessageError> {
-        if self.sim_crash_state==true{
-            match msg{
+    pub async fn handle_message(& self, msg: Message) -> Result<Option<Message>, MessageError> {
+        if self.sim_crash_state==true {
+            match msg {
 
-                Message::SimRecover => {
-                    self.sim_crash_state = false;
+                Message::SimulateCrash => {
+                    self.change_sim_crash_state(false);
                     Ok(None)
                 }
             // 500
-                _ => Ok(Message::CrashResponse)
+                _ => Ok(Some(Message::CrashResponse))
 
             }
         }
-        match msg {
+        else {
+            match msg {
             Message::Lookup(id) => {
                 let responsible_node = self.find_successor(id).await?;
                 Ok(Some(Message::LookupResult(responsible_node)))
@@ -164,15 +165,15 @@ where
                 let response = Message::PredecessorResponse(pred);
                 Ok(Some(response))
             }
-            Message::LeaveSuccessor(new_succecessor) => {
+            Message::LeaveSuccessor(new_successor) => {
                 // our successor left so we need to update it to the
                 // new given one
                 let mut successor = self.successor.lock().await;
                 // if given successor = self.successor, take self
-                *successor = if successor.id == new_succecessor.id {
+                *successor = if successor.id == new_successor.id {
                     Neighbor::new(self.address, self.web_address)
                 } else {
-                    new_succecessor
+                    new_successor
                 };
                 Ok(None)
             }
@@ -193,13 +194,14 @@ where
                 // crash state -> 500 to all requests but sim-recover
                 
                 // set self.somevariable = true and change states 
-                self.sim_crash_state = true;
+                self.change_sim_crash_state(true);
 
                 Ok(None)
             }
             Message::Ping => Ok(Some(Message::Pong)),
             _ => panic!("this should not happen (incoming message: {:?})", msg),
         }
+    }
     }
 
     pub async fn join(&self, entry_node: SocketAddr) -> Result<(), MessageError> {
@@ -327,6 +329,10 @@ where
         }
         self.store.lock().await.insert(key, value);
         Ok(())
+    }
+    
+    pub async fn change_sim_crash_state(& mut self, state: bool) {
+        self.sim_crash_state = state;
     }
 }
 
