@@ -37,6 +37,7 @@ def check_stable(nodes: List[int], ports: List[int], debug: bool):
 
     p.close()
     # check if each node has a unique successor
+    print(f"len succ = {len(set(successors))}, nodes == {len(nodes)}")
     return len(set(successors)) == len(nodes)
 
 
