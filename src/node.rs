@@ -138,9 +138,9 @@ where
     }
 
     pub async fn handle_message(& self, msg: Message) -> Result<Option<Message>, MessageError> {
-        let mut scs = self.sim_crash_state.lock().await;
-        if *scs == true {
-                Err((Some(MessageError::HTTPStatusError(INTERNAL_SERVER_ERROR))))
+        let scs = self.sim_crash_state.lock().await.clone();
+        if scs == true {
+                Err(MessageError::HTTPStatusError(http::StatusCode::INTERNAL_SERVER_ERROR))
             }
         else {
             match msg {
@@ -322,7 +322,18 @@ where
         self.store.lock().await.insert(key, value);
         Ok(())
     }
-    
+
+    pub async fn sim_crash(&self) -> Result<(), MessageError> {
+        let mut scs = self.sim_crash_state.lock().await;
+        *scs = true;
+        Ok(())
+    }
+
+    pub async fn sim_recover(&self) -> Result<(), MessageError> {
+        let mut scs = self.sim_crash_state.lock().await;
+        *scs = false;
+        Ok(())
+    }
 }
 
 impl<Key, Value> Display for Node<Key, Value>

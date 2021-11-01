@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use warp::http::Response;
 use warp::hyper::body::to_bytes;
 use warp::hyper::{Client, Uri};
-use warp::reply::Json;
+use warp::reply::{Json};
 use warp::Filter;
 
 use crate::node::Node;
@@ -156,6 +156,35 @@ pub async fn leave(node: Arc<ChordNode>) -> Result<Response<String>, warp::Rejec
     }
 }
 
+pub async fn sim_crash(node: Arc<ChordNode>) -> Result<Response<String>, warp::Rejection> {
+    let b = Response::builder();
+    if let Err(err) = node.sim_crash().await {
+        eprintln!("[{:}] error while simulating crash: {:?}", node.address, err);
+        Ok(b.status(warp::http::StatusCode::INTERNAL_SERVER_ERROR)
+            .body("error while sim-crash".to_string())
+            .unwrap())
+    } else {
+        println!("[{:}] artificially crashed", node.address);
+        Ok(b.status(warp::http::StatusCode::OK)
+            .body("ok".to_string())
+            .unwrap())
+    }
+}
+pub async fn sim_recover(node: Arc<ChordNode>) -> Result<Response<String>, warp::Rejection> {
+    let b = Response::builder();
+    if let Err(err) = node.sim_recover().await {
+        eprintln!("[{:}] error while simulating crash: {:?}", node.address, err);
+        Ok(b.status(warp::http::StatusCode::INTERNAL_SERVER_ERROR)
+            .body("error while sim-recovering".to_string())
+            .unwrap())
+    } else {
+        println!("[{:}] can now try to reconnect to chord network", node.address);
+        Ok(b.status(warp::http::StatusCode::OK)
+            .body("ok".to_string())
+            .unwrap())
+    }
+}
+
 pub async fn serve(addr: SocketAddr, node: Arc<ChordNode>) {
     let storage_api = warp::path!("storage" / String);
     let get_chord_node = node.clone();
@@ -184,7 +213,17 @@ pub async fn serve(addr: SocketAddr, node: Arc<ChordNode>) {
     let leave_chord_node = node.clone();
     let leave = warp::path!("leave").and_then(move || leave(leave_chord_node.clone()));
 
-    warp::serve(get.or(put).or(info).or(join).or(leave))
+    let sim_crash_node = node.clone();
+    let sim_crash = warp::path!("sim-crash")
+        .and_then(move || sim_crash(sim_crash_node.clone()));
+    
+    let sim_recover_node = node.clone();
+    let sim_recover = warp::path!("sim-recover")
+        .and_then(move || sim_recover(sim_recover_node.clone()));
+
+
+
+    warp::serve(get.or(put).or(info).or(join).or(leave).or(sim_crash).or(sim_recover))
         .bind(addr)
         .await;
 }
