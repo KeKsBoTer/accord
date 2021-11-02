@@ -29,7 +29,7 @@ def check_stable(nodes: List[int], ports: List[int], debug: bool):
     logger.debug("get successors...")
     edges = p.map(get_successor, [
         f"{nodes[i]}:{ports[i]+1}" for i in range(len(nodes))])
-    # print(edges)
+    print(edges)
 
     successors = [succ for (node, succ) in edges if node != succ]
 
@@ -92,8 +92,7 @@ def create_network(args, ips, ports) -> List[subprocess.Popen]:
 
     end = time.time()
     logger.info(f"stabilization took {end-start:.3f} seconds")
-    print(f"entrypoint - {ips[0]}:{ports[0]+1}")
-    print(f"entrypoint - {ips[1]}:{ports[1]+1}")
+    print(f"entrypoint - {ips[0]}:{ports[0]+1} {ips[1]}:{ports[1]+1}")
     print("list of processes completed")
     return processes
 
