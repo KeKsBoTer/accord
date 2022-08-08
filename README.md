@@ -1,6 +1,10 @@
 # Accord
 
-Chord implementation in rust.
+[Chord](https://en.wikipedia.org/wiki/Chord_(peer-to-peer)) implementation written in Rust.
+
+You can find the network design and performance evaluation [here](./INF3200__Mandatory_Assignment_1.pdf).
+
+A description and failure analysis about the network stabilization can be found [here](./INF3200__Mandatory_Assignment_2.pdf).
 
 ## Build
 
